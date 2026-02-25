@@ -115,11 +115,12 @@ function Add-LogLine {
 function Save-WindowState {
     $statePath = Join-Path $PSScriptRoot "LogAnalyzer.windowstate.json"
     $state = @{
-        X         = $form.Location.X
-        Y         = $form.Location.Y
-        Width     = $form.Size.Width
-        Height    = $form.Size.Height
-        Maximized = ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Maximized)
+        X                = $form.Location.X
+        Y                = $form.Location.Y
+        Width            = $form.Size.Width
+        Height           = $form.Size.Height
+        Maximized        = ($form.WindowState -eq [System.Windows.Forms.FormWindowState]::Maximized)
+        SplitterDistance = $splitMain.SplitterDistance
     }
     $state | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
 }
@@ -135,6 +136,9 @@ function Restore-WindowState {
         } else {
             $form.Location = New-Object System.Drawing.Point($state.X, $state.Y)
             $form.Size = New-Object System.Drawing.Size($state.Width, $state.Height)
+        }
+        if ($state.SplitterDistance) {
+            $splitMain.SplitterDistance = [int]$state.SplitterDistance
         }
     } catch { }
 }
@@ -492,10 +496,17 @@ $pnlLog.Controls.Add($txtLog)
 
 $pnlButtons = New-Object System.Windows.Forms.Panel
 $pnlButtons.Dock = [System.Windows.Forms.DockStyle]::Bottom
-$pnlButtons.Height = 52
-$pnlButtons.Padding = New-Object System.Windows.Forms.Padding(12, 6, 12, 4)
+$pnlButtons.Height = 53
+$pnlButtons.Padding = New-Object System.Windows.Forms.Padding(12, 7, 12, 4)
 $pnlButtons.BackColor = $clrFormBg
 $form.Controls.Add($pnlButtons)
+
+# 1px separator line at top of button panel (inside, not form-level)
+$pnlSepButtons = New-Object System.Windows.Forms.Panel
+$pnlSepButtons.Dock = [System.Windows.Forms.DockStyle]::Top
+$pnlSepButtons.Height = 1
+$pnlSepButtons.BackColor = $clrSepLine
+$pnlButtons.Controls.Add($pnlSepButtons)
 
 $flowButtons = New-Object System.Windows.Forms.FlowLayoutPanel
 $flowButtons.Dock = [System.Windows.Forms.DockStyle]::Fill
@@ -778,7 +789,7 @@ $form.Controls.Add($pnlSep2)
 $splitMain = New-Object System.Windows.Forms.SplitContainer
 $splitMain.Dock = [System.Windows.Forms.DockStyle]::Fill
 $splitMain.Orientation = [System.Windows.Forms.Orientation]::Horizontal
-$splitMain.SplitterDistance = 400
+$splitMain.SplitterDistance = 379
 $splitMain.SplitterWidth = 6
 $splitMain.BackColor = $clrSepLine
 $splitMain.Panel1.BackColor = $clrPanelBg
@@ -882,7 +893,7 @@ $grid.Add_RowPrePaint({
 # -- Detail panel in Panel2
 $pnlDetailWrap = New-Object System.Windows.Forms.Panel
 $pnlDetailWrap.Dock = [System.Windows.Forms.DockStyle]::Fill
-$pnlDetailWrap.Padding = New-Object System.Windows.Forms.Padding(8, 6, 8, 6)
+$pnlDetailWrap.Padding = New-Object System.Windows.Forms.Padding(8, 6, 8, 8)
 $pnlDetailWrap.BackColor = $clrPanelBg
 $splitMain.Panel2.Controls.Add($pnlDetailWrap)
 
@@ -895,16 +906,15 @@ $lblDetailTitle.ForeColor = $clrHint
 $lblDetailTitle.BackColor = $clrPanelBg
 $pnlDetailWrap.Controls.Add($lblDetailTitle)
 
-$txtDetail = New-Object System.Windows.Forms.TextBox
-$txtDetail.Multiline = $true
+$txtDetail = New-Object System.Windows.Forms.RichTextBox
 $txtDetail.ReadOnly = $true
-$txtDetail.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
 $txtDetail.Font = New-Object System.Drawing.Font("Consolas", 9)
 $txtDetail.BackColor = $clrDetailBg
 $txtDetail.ForeColor = $clrText
 $txtDetail.WordWrap = $true
 $txtDetail.Dock = [System.Windows.Forms.DockStyle]::Fill
 $txtDetail.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$txtDetail.ScrollBars = [System.Windows.Forms.RichTextBoxScrollBars]::Vertical
 $pnlDetailWrap.Controls.Add($txtDetail)
 # Ensure textbox fills below the label (add label last so dock order is correct)
 $txtDetail.BringToFront()
@@ -957,11 +967,16 @@ $grid.Add_SelectionChanged({
 })
 
 # ---------------------------------------------------------------------------
-# Finalize menu strip (add LAST, then SendToBack for outermost Top dock)
+# Finalize dock Z-order
+# WinForms docks from BACK (index 0) to FRONT (highest index).
+# Back = outermost (claims edge first).  Front = innermost (fills remaining).
+#   - menuStrip (Top) at the very BACK so it is outermost top edge
+#   - splitMain (Fill) at the very FRONT so it fills remaining space
 # ---------------------------------------------------------------------------
 
 $form.Controls.Add($menuStrip)
 $menuStrip.SendToBack()
+$splitMain.BringToFront()
 
 # ---------------------------------------------------------------------------
 # Window state persistence

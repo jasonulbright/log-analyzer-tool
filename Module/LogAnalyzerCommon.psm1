@@ -1174,11 +1174,15 @@ function Invoke-AppDeploymentAnalysis {
     $appLogs = @('AppEnforce', 'AppDiscovery', 'CAS', 'ContentTransferManager', 'LocationServices')
     $allEntries = @()
 
+    # Logs whose Info-level entries are noise (BITS transfer progress, etc.)
+    $warnErrorOnly = @('ContentTransferManager')
+
     foreach ($logName in $appLogs) {
         $logPath = Join-Path $LogFolder "$logName.log"
         if (Test-Path -LiteralPath $logPath) {
             $params = @{ Path = $logPath }
             if ($Since) { $params['After'] = $Since }
+            if ($logName -in $warnErrorOnly) { $params['TypeFilter'] = @(2, 3) }
             $allEntries += ConvertFrom-CMTraceLog @params
         }
     }

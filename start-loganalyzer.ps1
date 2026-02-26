@@ -93,6 +93,40 @@ function Enable-DoubleBuffer {
     if ($prop) { $prop.SetValue($Control, $true, $null) | Out-Null }
 }
 
+# Custom dark mode ToolStrip renderer
+if ($script:Prefs.DarkMode) {
+    if (-not ('DarkToolStripRenderer' -as [type])) {
+        $rendererCs = (
+            'using System.Drawing;',
+            'using System.Windows.Forms;',
+            'public class DarkToolStripRenderer : ToolStripProfessionalRenderer {',
+            '    private Color _bg;',
+            '    public DarkToolStripRenderer(Color bg) : base() { _bg = bg; }',
+            '    protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) { }',
+            '    protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e) {',
+            '        using (var b = new SolidBrush(_bg)) { e.Graphics.FillRectangle(b, e.AffectedBounds); }',
+            '    }',
+            '    protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e) {',
+            '        if (e.Item.Selected || e.Item.Pressed) {',
+            '            using (var b = new SolidBrush(Color.FromArgb(60, 60, 60)))',
+            '            { e.Graphics.FillRectangle(b, new Rectangle(Point.Empty, e.Item.Size)); }',
+            '        }',
+            '    }',
+            '    protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e) {',
+            '        int y = e.Item.Height / 2;',
+            '        using (var p = new Pen(Color.FromArgb(70, 70, 70)))',
+            '        { e.Graphics.DrawLine(p, 0, y, e.Item.Width, y); }',
+            '    }',
+            '    protected override void OnRenderImageMargin(ToolStripRenderEventArgs e) {',
+            '        using (var b = new SolidBrush(_bg)) { e.Graphics.FillRectangle(b, e.AffectedBounds); }',
+            '    }',
+            '}'
+        ) -join "`r`n"
+        Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition $rendererCs
+    }
+    $script:DarkRenderer = New-Object DarkToolStripRenderer($clrPanelBg)
+}
+
 function Add-LogLine {
     param(
         [Parameter(Mandatory)][System.Windows.Forms.TextBox]$TextBox,
@@ -184,6 +218,7 @@ if ($script:Prefs.DarkMode) {
     $clrGridLine   = [System.Drawing.Color]::FromArgb(60, 60, 60)
     $clrDetailBg   = [System.Drawing.Color]::FromArgb(45, 45, 45)
     $clrSepLine    = [System.Drawing.Color]::FromArgb(55, 55, 55)
+    $clrInputBdr   = [System.Drawing.Color]::FromArgb(70, 70, 70)
     $clrLogBg      = [System.Drawing.Color]::FromArgb(35, 35, 35)
     $clrLogFg      = [System.Drawing.Color]::FromArgb(200, 200, 200)
     $clrText       = [System.Drawing.Color]::FromArgb(220, 220, 220)
@@ -199,6 +234,7 @@ if ($script:Prefs.DarkMode) {
     $clrGridLine   = [System.Drawing.Color]::FromArgb(230, 230, 230)
     $clrDetailBg   = [System.Drawing.Color]::FromArgb(250, 250, 250)
     $clrSepLine    = [System.Drawing.Color]::FromArgb(218, 220, 224)
+    $clrInputBdr   = [System.Drawing.Color]::FromArgb(200, 200, 200)
     $clrLogBg      = [System.Drawing.Color]::White
     $clrLogFg      = [System.Drawing.Color]::Black
     $clrText       = [System.Drawing.Color]::Black
@@ -432,7 +468,12 @@ $menuStrip = New-Object System.Windows.Forms.MenuStrip
 $menuStrip.Dock = [System.Windows.Forms.DockStyle]::Top
 $menuStrip.BackColor = $clrPanelBg
 $menuStrip.ForeColor = $clrText
-$menuStrip.RenderMode = [System.Windows.Forms.ToolStripRenderMode]::System
+if ($script:DarkRenderer) {
+    $menuStrip.Renderer = $script:DarkRenderer
+} else {
+    $menuStrip.RenderMode = [System.Windows.Forms.ToolStripRenderMode]::System
+}
+$menuStrip.Padding = New-Object System.Windows.Forms.Padding(4, 2, 0, 0)
 
 $mnuFile = New-Object System.Windows.Forms.ToolStripMenuItem("&File")
 $mnuFilePrefs = New-Object System.Windows.Forms.ToolStripMenuItem("&Preferences...")
@@ -461,6 +502,12 @@ $status = New-Object System.Windows.Forms.StatusStrip
 $status.BackColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 45) } else { [System.Drawing.Color]::FromArgb(240, 240, 240) }
 $status.ForeColor = $clrText
 $status.Dock = [System.Windows.Forms.DockStyle]::Bottom
+if ($script:DarkRenderer) {
+    $status.Renderer = $script:DarkRenderer
+} else {
+    $status.RenderMode = [System.Windows.Forms.ToolStripRenderMode]::System
+}
+$status.SizingGrip = $false
 $statusLabel = New-Object System.Windows.Forms.ToolStripStatusLabel
 $statusLabel.Text = "Ready."
 $statusLabel.ForeColor = $clrText
@@ -481,7 +528,7 @@ $form.Controls.Add($pnlLog)
 $txtLog = New-Object System.Windows.Forms.TextBox
 $txtLog.Multiline = $true
 $txtLog.ReadOnly = $true
-$txtLog.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
+$txtLog.ScrollBars = if ($script:Prefs.DarkMode) { [System.Windows.Forms.ScrollBars]::None } else { [System.Windows.Forms.ScrollBars]::Vertical }
 $txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
 $txtLog.BackColor = $clrLogBg
 $txtLog.ForeColor = $clrLogFg
@@ -496,8 +543,8 @@ $pnlLog.Controls.Add($txtLog)
 
 $pnlButtons = New-Object System.Windows.Forms.Panel
 $pnlButtons.Dock = [System.Windows.Forms.DockStyle]::Bottom
-$pnlButtons.Height = 53
-$pnlButtons.Padding = New-Object System.Windows.Forms.Padding(12, 7, 12, 4)
+$pnlButtons.Height = 56
+$pnlButtons.Padding = New-Object System.Windows.Forms.Padding(12, 10, 12, 4)
 $pnlButtons.BackColor = $clrFormBg
 $form.Controls.Add($pnlButtons)
 
@@ -597,21 +644,28 @@ $grpDevices.Text = "Device(s)"
 $grpDevices.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $grpDevices.Dock = [System.Windows.Forms.DockStyle]::Fill
 $grpDevices.BackColor = $clrPanelBg
-$grpDevices.ForeColor = $clrText
+$grpDevices.ForeColor = if ($script:Prefs.DarkMode) { $clrSepLine } else { $clrText }
+$grpDevices.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $grpDevices.Margin = New-Object System.Windows.Forms.Padding(4)
 $grpDevices.Padding = New-Object System.Windows.Forms.Padding(8, 4, 8, 4)
 $tblInput.Controls.Add($grpDevices, 0, 0)
 
 $txtDevices = New-Object System.Windows.Forms.TextBox
 $txtDevices.Multiline = $true
-$txtDevices.ScrollBars = [System.Windows.Forms.ScrollBars]::Vertical
+$txtDevices.ScrollBars = if ($script:Prefs.DarkMode) { [System.Windows.Forms.ScrollBars]::None } else { [System.Windows.Forms.ScrollBars]::Vertical }
 $txtDevices.Font = New-Object System.Drawing.Font("Consolas", 9.5)
 $txtDevices.AcceptsReturn = $true
 $txtDevices.Dock = [System.Windows.Forms.DockStyle]::Fill
-$txtDevices.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$txtDevices.BorderStyle = [System.Windows.Forms.BorderStyle]::None
 $txtDevices.BackColor = $clrDetailBg
 $txtDevices.ForeColor = $clrText
-$grpDevices.Controls.Add($txtDevices)
+
+$pnlDevicesBdr = New-Object System.Windows.Forms.Panel
+$pnlDevicesBdr.Dock = [System.Windows.Forms.DockStyle]::Fill
+$pnlDevicesBdr.Padding = New-Object System.Windows.Forms.Padding(1)
+$pnlDevicesBdr.BackColor = $clrInputBdr
+$pnlDevicesBdr.Controls.Add($txtDevices)
+$grpDevices.Controls.Add($pnlDevicesBdr)
 
 $lblDevicesHint = New-Object System.Windows.Forms.Label
 $lblDevicesHint.Text = "One per line, or comma-separated"
@@ -628,7 +682,8 @@ $grpScope.Text = "Analysis Scope"
 $grpScope.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $grpScope.Dock = [System.Windows.Forms.DockStyle]::Fill
 $grpScope.BackColor = $clrPanelBg
-$grpScope.ForeColor = $clrText
+$grpScope.ForeColor = if ($script:Prefs.DarkMode) { $clrSepLine } else { $clrText }
+$grpScope.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $grpScope.Margin = New-Object System.Windows.Forms.Padding(4)
 $grpScope.Padding = New-Object System.Windows.Forms.Padding(10, 6, 10, 6)
 $tblInput.Controls.Add($grpScope, 1, 0)
@@ -646,6 +701,9 @@ $radAll.Checked = $true
 $radAll.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $radAll.AutoSize = $true
 $radAll.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+$radAll.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$radAll.BackColor = $clrPanelBg
+$radAll.ForeColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(170, 170, 170) } else { $clrText }
 $flowScope.Controls.Add($radAll)
 
 $radApp = New-Object System.Windows.Forms.RadioButton
@@ -653,6 +711,9 @@ $radApp.Text = "App Deployment"
 $radApp.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $radApp.AutoSize = $true
 $radApp.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+$radApp.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$radApp.BackColor = $clrPanelBg
+$radApp.ForeColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(170, 170, 170) } else { $clrText }
 $flowScope.Controls.Add($radApp)
 
 $radUpdates = New-Object System.Windows.Forms.RadioButton
@@ -660,6 +721,9 @@ $radUpdates.Text = "Software Updates"
 $radUpdates.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $radUpdates.AutoSize = $true
 $radUpdates.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+$radUpdates.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$radUpdates.BackColor = $clrPanelBg
+$radUpdates.ForeColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(170, 170, 170) } else { $clrText }
 $flowScope.Controls.Add($radUpdates)
 
 $radClient = New-Object System.Windows.Forms.RadioButton
@@ -667,6 +731,9 @@ $radClient.Text = "Client Install"
 $radClient.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $radClient.AutoSize = $true
 $radClient.Margin = New-Object System.Windows.Forms.Padding(0, 2, 0, 0)
+$radClient.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$radClient.BackColor = $clrPanelBg
+$radClient.ForeColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(170, 170, 170) } else { $clrText }
 $flowScope.Controls.Add($radClient)
 
 # -- Column 2: Time Filter GroupBox
@@ -675,7 +742,8 @@ $grpTime.Text = "Time Filter"
 $grpTime.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
 $grpTime.Dock = [System.Windows.Forms.DockStyle]::Fill
 $grpTime.BackColor = $clrPanelBg
-$grpTime.ForeColor = $clrText
+$grpTime.ForeColor = if ($script:Prefs.DarkMode) { $clrSepLine } else { $clrText }
+$grpTime.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $grpTime.Margin = New-Object System.Windows.Forms.Padding(4)
 $grpTime.Padding = New-Object System.Windows.Forms.Padding(10, 10, 10, 6)
 $tblInput.Controls.Add($grpTime, 2, 0)
@@ -702,7 +770,7 @@ $txtHours.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $txtHours.Width = 50
 $txtHours.MaxLength = 5
 $txtHours.Margin = New-Object System.Windows.Forms.Padding(0, 2, 4, 0)
-$txtHours.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$txtHours.BorderStyle = if ($script:Prefs.DarkMode) { [System.Windows.Forms.BorderStyle]::None } else { [System.Windows.Forms.BorderStyle]::FixedSingle }
 $txtHours.BackColor = $clrDetailBg
 $txtHours.ForeColor = $clrText
 $flowTime.Controls.Add($txtHours)
@@ -745,8 +813,9 @@ $chkShowInfo.Text = "Show Info entries"
 $chkShowInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $chkShowInfo.AutoSize = $true
 $chkShowInfo.Margin = New-Object System.Windows.Forms.Padding(4, 5, 16, 0)
+$chkShowInfo.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
 $chkShowInfo.BackColor = $clrPanelBg
-$chkShowInfo.ForeColor = $clrText
+$chkShowInfo.ForeColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(170, 170, 170) } else { $clrText }
 $flowFilter.Controls.Add($chkShowInfo)
 
 $lblFilter = New-Object System.Windows.Forms.Label
@@ -762,7 +831,7 @@ $txtFilter = New-Object System.Windows.Forms.TextBox
 $txtFilter.Font = New-Object System.Drawing.Font("Segoe UI", 9.5)
 $txtFilter.Width = 260
 $txtFilter.Margin = New-Object System.Windows.Forms.Padding(0, 2, 20, 0)
-$txtFilter.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$txtFilter.BorderStyle = if ($script:Prefs.DarkMode) { [System.Windows.Forms.BorderStyle]::None } else { [System.Windows.Forms.BorderStyle]::FixedSingle }
 $txtFilter.BackColor = $clrDetailBg
 $txtFilter.ForeColor = $clrText
 $flowFilter.Controls.Add($txtFilter)
@@ -819,11 +888,14 @@ $grid.ColumnHeadersDefaultCellStyle.Font = New-Object System.Drawing.Font("Segoe
 $grid.ColumnHeadersDefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(4)
 $grid.ColumnHeadersHeightSizeMode = [System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode]::DisableResizing
 $grid.ColumnHeadersHeight = 34
+$grid.ColumnHeadersBorderStyle = [System.Windows.Forms.DataGridViewHeaderBorderStyle]::Single
 $grid.EnableHeadersVisualStyles = $false
 $grid.DefaultCellStyle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 $grid.DefaultCellStyle.ForeColor = $clrGridText
 $grid.DefaultCellStyle.BackColor = $clrPanelBg
 $grid.DefaultCellStyle.Padding = New-Object System.Windows.Forms.Padding(2)
+$grid.DefaultCellStyle.SelectionBackColor = if ($script:Prefs.DarkMode) { [System.Drawing.Color]::FromArgb(38, 79, 120) } else { [System.Drawing.Color]::FromArgb(0, 120, 215) }
+$grid.DefaultCellStyle.SelectionForeColor = [System.Drawing.Color]::White
 $grid.RowTemplate.Height = 28
 $grid.AlternatingRowsDefaultCellStyle.BackColor = $clrGridAlt
 
@@ -913,11 +985,17 @@ $txtDetail.BackColor = $clrDetailBg
 $txtDetail.ForeColor = $clrText
 $txtDetail.WordWrap = $true
 $txtDetail.Dock = [System.Windows.Forms.DockStyle]::Fill
-$txtDetail.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+$txtDetail.BorderStyle = [System.Windows.Forms.BorderStyle]::None
 $txtDetail.ScrollBars = [System.Windows.Forms.RichTextBoxScrollBars]::Vertical
-$pnlDetailWrap.Controls.Add($txtDetail)
-# Ensure textbox fills below the label (add label last so dock order is correct)
-$txtDetail.BringToFront()
+
+$pnlDetailBdr = New-Object System.Windows.Forms.Panel
+$pnlDetailBdr.Dock = [System.Windows.Forms.DockStyle]::Fill
+$pnlDetailBdr.Padding = New-Object System.Windows.Forms.Padding(1)
+$pnlDetailBdr.BackColor = $clrInputBdr
+$pnlDetailBdr.Controls.Add($txtDetail)
+$pnlDetailWrap.Controls.Add($pnlDetailBdr)
+# Ensure detail border fills below the label (add label last so dock order is correct)
+$pnlDetailBdr.BringToFront()
 
 # Update detail on selection change
 $grid.Add_SelectionChanged({
@@ -968,14 +1046,23 @@ $grid.Add_SelectionChanged({
 
 # ---------------------------------------------------------------------------
 # Finalize dock Z-order
-# WinForms docks from BACK (index 0) to FRONT (highest index).
-# Back = outermost (claims edge first).  Front = innermost (fills remaining).
-#   - menuStrip (Top) at the very BACK so it is outermost top edge
-#   - splitMain (Fill) at the very FRONT so it fills remaining space
+# WinForms Top-dock: highest Z-index = topmost visual position.
+# BringToFront() in reverse visual order; last call = highest index = topmost.
+# MenuStrip is special (MainMenuStrip) and always stays at absolute top.
+# splitMain (Fill) must be last BringToFront so it fills remaining space.
 # ---------------------------------------------------------------------------
 
 $form.Controls.Add($menuStrip)
 $menuStrip.SendToBack()
+
+# Reorder Top panels: last BringToFront = highest index = topmost position
+$pnlSep2.BringToFront()
+$pnlFilter.BringToFront()
+$pnlSep1.BringToFront()
+$pnlInput.BringToFront()
+$pnlHeader.BringToFront()
+
+# Fill must be absolute front (processed after all edge-docked controls)
 $splitMain.BringToFront()
 
 # ---------------------------------------------------------------------------

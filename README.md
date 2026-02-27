@@ -2,7 +2,7 @@
 
 A WinForms-based PowerShell GUI for analyzing MECM (Configuration Manager) client logs from remote devices. Retrieves logs via ADMIN$ share, parses CMTrace-format files, translates 100+ error codes to plain English, detects root causes, and exports results to CSV or HTML.
 
-![Log Analyzer](log-analyzer.png)
+![Log Analyzer](lightmode.png)
 
 ## Requirements
 
@@ -68,12 +68,16 @@ Compares the MSI exit timestamp against the last system reboot time (CIM with WM
 ### UI
 
 - Dark mode and light mode with full theme support
+  - Custom ToolStrip renderer (no light borders/gradients in dark mode)
+  - Themed input borders, grid selection highlights, and separator lines
+  - Flat-styled GroupBoxes, RadioButtons, and CheckBoxes
 - Real-time text filter across message, error code, translation, and component
 - Toggle Info-level entries on/off
 - Color-coded severity rows (red = error, orange = warning)
-- Detail panel with full entry context, translation, resolution, and recommended logs
+- Detail panel (RichTextBox) with full entry context, translation, resolution, and recommended logs
 - Live log console showing analysis progress
-- Window position and size persistence across sessions
+- Window position, size, and splitter distance persistence across sessions
+- All logs filtered to warnings and errors at parse time for fast grid loading
 
 ## Project Structure
 

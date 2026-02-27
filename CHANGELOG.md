@@ -2,6 +2,44 @@
 
 All notable changes to the Log Analyzer Tool (LAT) are documented in this file.
 
+## [1.1.0] - 2026-02-26
+
+### Fixed
+
+- **Dock Z-order**: Top panels (header, input, filter) now display in correct
+  visual order via explicit `BringToFront()` sequencing
+- **Fill control sizing**: `splitMain.BringToFront()` ensures the grid/detail
+  area fills only the remaining space after all edge-docked panels
+- **Entry Detail scrolling**: Switched from TextBox to RichTextBox for reliable
+  vertical scrollbar behavior
+- **Detail panel border**: Bottom border no longer clipped behind button panel
+
+### Improved
+
+- **Dark mode theming**
+  - Custom `DarkToolStripRenderer` suppresses light borders/gradients on
+    MenuStrip and StatusStrip
+  - Themed input borders via wrapper panels (replaces system FixedSingle)
+  - Flat-styled GroupBoxes with dim ForeColor for subtle borders
+  - RadioButtons and CheckBox use muted ForeColor (170,170,170)
+  - Grid selection highlight uses dark blue (38,79,120) instead of system bright
+  - Column header borders use themed GridColor
+  - Scrollbars hidden on Devices input and log console in dark mode
+- **Log noise filtering**: All 14 log files across all 3 analysis engines now
+  filtered to warnings and errors at parse time (`TypeFilter = @(2,3)`),
+  eliminating Info-level chatter (BITS progress, file copies, download status)
+- **Splitter persistence**: Grid/detail split position saved and restored in
+  `LogAnalyzer.windowstate.json`
+- **Button panel**: 1px separator line at top for visual definition; increased
+  spacing between separator and export buttons
+
+### Added
+
+- `README.md` with feature overview, project structure, and quick start
+- `CHANGELOG.md`
+- `LICENSE` (GPL-3.0)
+- `.gitignore` for runtime files (Logs/, Reports/, preferences, window state)
+
 ## [1.0.0] - 2026-02-25
 
 ### Added

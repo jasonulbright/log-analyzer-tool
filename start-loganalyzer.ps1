@@ -183,12 +183,18 @@ function Restore-WindowState {
 
 function Get-LatPreferences {
     $prefsPath = Join-Path $PSScriptRoot "LogAnalyzer.prefs.json"
-    $defaults = @{ DarkMode = $false }
+    $defaults = @{
+        DarkMode     = $false
+        Transport    = 'AdminShare'
+        EvidencePath = ''
+    }
 
     if (Test-Path -LiteralPath $prefsPath) {
         try {
             $loaded = Get-Content -LiteralPath $prefsPath -Raw | ConvertFrom-Json
-            if ($null -ne $loaded.DarkMode) { $defaults.DarkMode = [bool]$loaded.DarkMode }
+            if ($null -ne $loaded.DarkMode)     { $defaults.DarkMode     = [bool]$loaded.DarkMode }
+            if ($null -ne $loaded.Transport)     { $defaults.Transport    = [string]$loaded.Transport }
+            if ($null -ne $loaded.EvidencePath)  { $defaults.EvidencePath = [string]$loaded.EvidencePath }
         } catch { }
     }
 
@@ -250,7 +256,7 @@ if ($script:Prefs.DarkMode) {
 function Show-PreferencesDialog {
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = "Preferences"
-    $dlg.Size = New-Object System.Drawing.Size(420, 280)
+    $dlg.Size = New-Object System.Drawing.Size(420, 350)
     $dlg.MinimumSize = $dlg.Size
     $dlg.MaximumSize = $dlg.Size
     $dlg.StartPosition = "CenterParent"
@@ -280,48 +286,82 @@ function Show-PreferencesDialog {
     $chkDark.BackColor = $clrFormBg
     $grpAppearance.Controls.Add($chkDark)
 
-    # Future settings (disabled placeholders)
-    $grpFuture = New-Object System.Windows.Forms.GroupBox
-    $grpFuture.Text = "MECM Connection (coming soon)"
-    $grpFuture.SetBounds(16, 82, 372, 100)
-    $grpFuture.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $grpFuture.ForeColor = $clrHint
-    $grpFuture.BackColor = $clrFormBg
-    $dlg.Controls.Add($grpFuture)
+    # Log Retrieval transport
+    $grpTransport = New-Object System.Windows.Forms.GroupBox
+    $grpTransport.Text = "Log Retrieval"
+    $grpTransport.SetBounds(16, 82, 372, 80)
+    $grpTransport.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $grpTransport.ForeColor = $clrText
+    $grpTransport.BackColor = $clrFormBg
+    $dlg.Controls.Add($grpTransport)
 
-    $lblSiteCode = New-Object System.Windows.Forms.Label
-    $lblSiteCode.Text = "Site Code:"
-    $lblSiteCode.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-    $lblSiteCode.Location = New-Object System.Drawing.Point(14, 28)
-    $lblSiteCode.AutoSize = $true
-    $lblSiteCode.ForeColor = $clrHint
-    $grpFuture.Controls.Add($lblSiteCode)
+    $radAdminShare = New-Object System.Windows.Forms.RadioButton
+    $radAdminShare.Text = 'ADMIN$ share (default)'
+    $radAdminShare.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $radAdminShare.Location = New-Object System.Drawing.Point(14, 24)
+    $radAdminShare.AutoSize = $true
+    $radAdminShare.ForeColor = $clrText
+    $radAdminShare.Checked = ($script:Prefs.Transport -eq 'AdminShare')
+    $grpTransport.Controls.Add($radAdminShare)
 
-    $txtSiteCode = New-Object System.Windows.Forms.TextBox
-    $txtSiteCode.SetBounds(130, 25, 80, 24)
-    $txtSiteCode.Enabled = $false
-    $txtSiteCode.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-    $grpFuture.Controls.Add($txtSiteCode)
+    $radPSRemote = New-Object System.Windows.Forms.RadioButton
+    $radPSRemote.Text = 'PowerShell Remoting (no C$/ADMIN$ needed)'
+    $radPSRemote.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $radPSRemote.Location = New-Object System.Drawing.Point(14, 48)
+    $radPSRemote.AutoSize = $true
+    $radPSRemote.ForeColor = $clrText
+    $radPSRemote.Checked = ($script:Prefs.Transport -eq 'PSRemote')
+    $grpTransport.Controls.Add($radPSRemote)
 
-    $lblServer = New-Object System.Windows.Forms.Label
-    $lblServer.Text = "Primary Server:"
-    $lblServer.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-    $lblServer.Location = New-Object System.Drawing.Point(14, 60)
-    $lblServer.AutoSize = $true
-    $lblServer.ForeColor = $clrHint
-    $grpFuture.Controls.Add($lblServer)
+    # Evidence Saving
+    $grpEvidence = New-Object System.Windows.Forms.GroupBox
+    $grpEvidence.Text = "Evidence Saving"
+    $grpEvidence.SetBounds(16, 172, 372, 60)
+    $grpEvidence.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $grpEvidence.ForeColor = $clrText
+    $grpEvidence.BackColor = $clrFormBg
+    $dlg.Controls.Add($grpEvidence)
 
-    $txtServer = New-Object System.Windows.Forms.TextBox
-    $txtServer.SetBounds(130, 57, 220, 24)
-    $txtServer.Enabled = $false
-    $txtServer.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-    $grpFuture.Controls.Add($txtServer)
+    $lblEvidence = New-Object System.Windows.Forms.Label
+    $lblEvidence.Text = "Path:"
+    $lblEvidence.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblEvidence.Location = New-Object System.Drawing.Point(14, 26)
+    $lblEvidence.AutoSize = $true
+    $lblEvidence.ForeColor = $clrText
+    $grpEvidence.Controls.Add($lblEvidence)
+
+    $txtEvidence = New-Object System.Windows.Forms.TextBox
+    $txtEvidence.SetBounds(52, 23, 230, 24)
+    $txtEvidence.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $txtEvidence.Text = $script:Prefs.EvidencePath
+    $txtEvidence.ForeColor = $clrText
+    $txtEvidence.BackColor = $clrFormBg
+    $grpEvidence.Controls.Add($txtEvidence)
+
+    $btnBrowse = New-Object System.Windows.Forms.Button
+    $btnBrowse.Text = "Browse..."
+    $btnBrowse.SetBounds(290, 22, 68, 26)
+    $btnBrowse.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+    $btnBrowse.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $btnBrowse.FlatAppearance.BorderColor = $clrSepLine
+    $btnBrowse.ForeColor = $clrText
+    $btnBrowse.BackColor = $clrFormBg
+    $grpEvidence.Controls.Add($btnBrowse)
+
+    $btnBrowse.Add_Click({
+        $fbd = New-Object System.Windows.Forms.FolderBrowserDialog
+        $fbd.Description = "Select evidence save folder"
+        if ($txtEvidence.Text -ne '') { $fbd.SelectedPath = $txtEvidence.Text }
+        if ($fbd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $txtEvidence.Text = $fbd.SelectedPath
+        }
+    })
 
     # OK / Cancel
     $btnOK = New-Object System.Windows.Forms.Button
     $btnOK.Text = "OK"
     $btnOK.Size = New-Object System.Drawing.Size(90, 32)
-    $btnOK.Location = New-Object System.Drawing.Point(208, 196)
+    $btnOK.Location = New-Object System.Drawing.Point(208, 262)
     $btnOK.DialogResult = [System.Windows.Forms.DialogResult]::OK
     Set-ModernButtonStyle -Button $btnOK -BackColor $clrAccent
     $dlg.Controls.Add($btnOK)
@@ -330,7 +370,7 @@ function Show-PreferencesDialog {
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text = "Cancel"
     $btnCancel.Size = New-Object System.Drawing.Size(90, 32)
-    $btnCancel.Location = New-Object System.Drawing.Point(306, 196)
+    $btnCancel.Location = New-Object System.Drawing.Point(306, 262)
     $btnCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $btnCancel.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $btnCancel.FlatAppearance.BorderColor = $clrSepLine
@@ -341,7 +381,9 @@ function Show-PreferencesDialog {
 
     if ($dlg.ShowDialog($form) -eq [System.Windows.Forms.DialogResult]::OK) {
         $darkChanged = ($chkDark.Checked -ne $script:Prefs.DarkMode)
-        $script:Prefs.DarkMode = $chkDark.Checked
+        $script:Prefs.DarkMode     = $chkDark.Checked
+        $script:Prefs.Transport    = if ($radPSRemote.Checked) { 'PSRemote' } else { 'AdminShare' }
+        $script:Prefs.EvidencePath = $txtEvidence.Text.Trim()
         Save-LatPreferences -Prefs $script:Prefs
 
         if ($darkChanged) {
@@ -1134,21 +1176,31 @@ $btnAnalyze.Add_Click({
         Add-LogLine -TextBox $txtLog -Message "Testing access to $hostname..."
         [System.Windows.Forms.Application]::DoEvents()
 
-        $accessResult = Test-AdminShareAccess -Hostname $hostname
+        if ($script:Prefs.Transport -eq 'PSRemote') {
+            $accessResult = Test-PSRemoteAccess -Hostname $hostname
+        } else {
+            $accessResult = Test-AdminShareAccess -Hostname $hostname
+        }
         if (-not $accessResult.Accessible) {
             Add-LogLine -TextBox $txtLog -Message "FAILED: Cannot access $hostname - $($accessResult.ErrorMessage)"
             continue
         }
-
-        Add-LogLine -TextBox $txtLog -Message "Copying logs from $hostname..."
-        [System.Windows.Forms.Application]::DoEvents()
 
         $copyParams = @{
             Hostname         = $hostname
             LocalStagingRoot = $stagingRoot
         }
         if ($categories.Count -gt 0) { $copyParams['Categories'] = $categories }
-        $copyResults = Copy-RemoteLogFiles @copyParams
+
+        if ($script:Prefs.Transport -eq 'PSRemote') {
+            Add-LogLine -TextBox $txtLog -Message "Copying logs from $hostname via PSRemoting..."
+            [System.Windows.Forms.Application]::DoEvents()
+            $copyResults = Copy-RemoteLogFilesPSRemote @copyParams
+        } else {
+            Add-LogLine -TextBox $txtLog -Message "Copying logs from $hostname via ADMIN$ share..."
+            [System.Windows.Forms.Application]::DoEvents()
+            $copyResults = Copy-RemoteLogFiles @copyParams
+        }
 
         $copied = @($copyResults | Where-Object { $_.CopySuccess })
         $failed = @($copyResults | Where-Object { -not $_.CopySuccess })
@@ -1157,6 +1209,20 @@ $btnAnalyze.Add_Click({
         if ($copied.Count -eq 0) {
             Add-LogLine -TextBox $txtLog -Message "No logs retrieved from $hostname."
             continue
+        }
+
+        # Save evidence copy if configured
+        if ($script:Prefs.EvidencePath -ne '') {
+            Add-LogLine -TextBox $txtLog -Message "Saving evidence copy for $hostname..."
+            [System.Windows.Forms.Application]::DoEvents()
+            $evidenceResult = Save-EvidenceCopy -Hostname $hostname `
+                -StagingFolder (Join-Path $stagingRoot $hostname) `
+                -EvidenceRoot $script:Prefs.EvidencePath
+            if ($evidenceResult.Error) {
+                Add-LogLine -TextBox $txtLog -Message "WARNING: Evidence save failed - $($evidenceResult.Error)"
+            } else {
+                Add-LogLine -TextBox $txtLog -Message "Evidence saved: $($evidenceResult.FilesCopied) file(s) to $($evidenceResult.EvidencePath)"
+            }
         }
 
         $logFolder = Join-Path $stagingRoot $hostname

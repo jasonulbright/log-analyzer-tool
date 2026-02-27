@@ -247,6 +247,54 @@ function Test-AdminShareAccess {
     return $result
 }
 
+function Test-PSRemoteAccess {
+    <#
+    .SYNOPSIS
+        Tests whether PSRemoting is reachable on a remote device.
+
+    .OUTPUTS
+        [pscustomobject] with Hostname, Accessible, CcmLogs, SetupLogs, ErrorMessage
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    $result = [pscustomobject]@{
+        Hostname     = $Hostname
+        Accessible   = $false
+        CcmLogs      = $false
+        SetupLogs    = $false
+        ErrorMessage = $null
+    }
+
+    try {
+        $session = New-PSSession -ComputerName $Hostname -ErrorAction Stop
+
+        $pathCheck = Invoke-Command -Session $session -ScriptBlock {
+            @{
+                CcmLogs   = Test-Path 'C:\Windows\CCM\Logs'
+                SetupLogs = Test-Path 'C:\Windows\ccmsetup\Logs'
+            }
+        } -ErrorAction Stop
+
+        $result.CcmLogs   = $pathCheck.CcmLogs
+        $result.SetupLogs = $pathCheck.SetupLogs
+        $result.Accessible = $result.CcmLogs -or $result.SetupLogs
+
+        if (-not $result.Accessible) {
+            $result.ErrorMessage = "Neither CCM\Logs nor ccmsetup\Logs found on $Hostname"
+        }
+
+        Remove-PSSession -Session $session
+    }
+    catch {
+        $result.ErrorMessage = $_.Exception.Message
+    }
+
+    return $result
+}
+
 function Get-RemoteLogFiles {
     <#
     .SYNOPSIS
@@ -364,6 +412,166 @@ function Copy-RemoteLogFiles {
     }
 
     return $results
+}
+
+function Copy-RemoteLogFilesPSRemote {
+    <#
+    .SYNOPSIS
+        Copies log files from remote device to local staging via PSRemoting.
+
+    .DESCRIPTION
+        Uses New-PSSession + Invoke-Command to read file bytes on the remote
+        device and write them locally. No ADMIN$/C$ share access needed.
+
+    .OUTPUTS
+        [pscustomobject[]] with LogName, LocalPath, SourceUNC, CopySuccess, Error, Category
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname,
+
+        [Parameter(Mandatory)]
+        [string]$LocalStagingRoot,
+
+        [string[]]$LogNames,
+
+        [string[]]$Categories,
+
+        [switch]$IncludeRotated
+    )
+
+    $deviceFolder = Join-Path $LocalStagingRoot $Hostname
+    if (-not (Test-Path -LiteralPath $deviceFolder)) {
+        New-Item -ItemType Directory -Path $deviceFolder -Force | Out-Null
+    }
+
+    $results = @()
+
+    try {
+        $session = New-PSSession -ComputerName $Hostname -ErrorAction Stop
+    }
+    catch {
+        Write-Log "PSRemote session failed for ${Hostname}: $($_.Exception.Message)" -Level ERROR
+        return $results
+    }
+
+    try {
+        foreach ($logName in $script:KnownLogs.Keys) {
+            $meta = $script:KnownLogs[$logName]
+
+            if ($LogNames -and $logName -notin $LogNames) { continue }
+            if ($Categories -and $meta.Category -notin $Categories) { continue }
+
+            $remotePath = "C:\Windows\$($meta.Path)\$logName.log"
+
+            $entry = [pscustomobject]@{
+                LogName     = $logName
+                LocalPath   = (Join-Path $deviceFolder "$logName.log")
+                SourceUNC   = "\\$Hostname\C`$\Windows\$($meta.Path)\$logName.log"
+                CopySuccess = $false
+                Error       = $null
+                Category    = $meta.Category
+            }
+
+            try {
+                $fileBytes = Invoke-Command -Session $session -ScriptBlock {
+                    param($p)
+                    if (Test-Path -LiteralPath $p) {
+                        [System.IO.File]::ReadAllBytes($p)
+                    } else {
+                        $null
+                    }
+                } -ArgumentList $remotePath -ErrorAction Stop
+
+                if ($null -ne $fileBytes) {
+                    [System.IO.File]::WriteAllBytes($entry.LocalPath, $fileBytes)
+                    $entry.CopySuccess = $true
+                }
+
+                # Copy rotated logs if requested
+                if ($IncludeRotated -and $entry.CopySuccess) {
+                    $rotatedRemote = "C:\Windows\$($meta.Path)\$logName.lo_"
+                    $rotatedBytes = Invoke-Command -Session $session -ScriptBlock {
+                        param($p)
+                        if (Test-Path -LiteralPath $p) {
+                            [System.IO.File]::ReadAllBytes($p)
+                        } else {
+                            $null
+                        }
+                    } -ArgumentList $rotatedRemote -ErrorAction SilentlyContinue
+
+                    if ($null -ne $rotatedBytes) {
+                        $rotatedDest = Join-Path $deviceFolder "$logName.lo_"
+                        [System.IO.File]::WriteAllBytes($rotatedDest, $rotatedBytes)
+                    }
+                }
+            }
+            catch {
+                $entry.Error = $_.Exception.Message
+            }
+
+            if ($entry.CopySuccess -or $entry.Error) {
+                $results += $entry
+            }
+        }
+    }
+    finally {
+        Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+    }
+
+    return $results
+}
+
+function Save-EvidenceCopy {
+    <#
+    .SYNOPSIS
+        Copies staged log files to an evidence folder for documentation.
+
+    .DESCRIPTION
+        Creates "hostname - YYMMDD - userid" subfolder under EvidenceRoot
+        and copies all files from the local staging folder into it.
+
+    .OUTPUTS
+        [pscustomobject] with EvidencePath, FilesCopied, Error
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname,
+
+        [Parameter(Mandatory)]
+        [string]$StagingFolder,
+
+        [Parameter(Mandatory)]
+        [string]$EvidenceRoot
+    )
+
+    $dateStamp = (Get-Date).ToString('yyMMdd')
+    $userId    = $env:USERNAME
+    $folderName = "$Hostname - $dateStamp - $userId"
+    $evidencePath = Join-Path $EvidenceRoot $folderName
+
+    $result = [pscustomobject]@{
+        EvidencePath = $evidencePath
+        FilesCopied  = 0
+        Error        = $null
+    }
+
+    try {
+        if (-not (Test-Path -LiteralPath $evidencePath)) {
+            New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
+        }
+
+        $files = Get-ChildItem -LiteralPath $StagingFolder -File -ErrorAction Stop
+        foreach ($file in $files) {
+            Copy-Item -LiteralPath $file.FullName -Destination $evidencePath -Force -ErrorAction Stop
+            $result.FilesCopied++
+        }
+    }
+    catch {
+        $result.Error = $_.Exception.Message
+    }
+
+    return $result
 }
 
 # ---------------------------------------------------------------------------

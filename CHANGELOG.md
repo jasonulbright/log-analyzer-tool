@@ -2,6 +2,27 @@
 
 All notable changes to the Log Analyzer Tool (LAT) are documented in this file.
 
+## [1.2.0] - 2026-02-27
+
+### Added
+
+- **Dual-transport log retrieval**: Configurable via File > Preferences
+  - **ADMIN$ share** (default): existing behavior, works for most environments
+  - **PowerShell Remoting**: retrieves log file bytes over WinRM sessions -- no C$/ADMIN$ share access needed. For environments where SentinelOne or similar EDR blocks administrative shares.
+  - New module functions: `Test-PSRemoteAccess`, `Copy-RemoteLogFilesPSRemote`
+
+- **Evidence saving**: When an evidence path is configured in Preferences, log files are copied to `\\share\hostname - YYMMDD - userid\` after retrieval and before analysis. Serves dual purpose: alternative retrieval fallback and timestamped documentation for support tickets.
+  - New module function: `Save-EvidenceCopy`
+  - Evidence save failure is non-blocking -- analysis continues with a warning
+
+- **Preferences dialog**: Replaced placeholder "MECM Connection (coming soon)" section with two active groups:
+  - Log Retrieval: radio buttons for ADMIN$ share vs PowerShell Remoting
+  - Evidence Saving: path textbox with Browse button
+
+### Changed
+
+- Module version bumped to 1.1.0, manifest exports increased from 22 to 25 functions
+
 ## [1.1.0] - 2026-02-26
 
 ### Fixed

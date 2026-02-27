@@ -1,6 +1,6 @@
 @{
     RootModule        = 'LogAnalyzerCommon.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.1.0'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Jason Ulbright'
     Description       = 'MECM log retrieval, CMTrace parsing, error code translation, and analysis.'
@@ -14,10 +14,17 @@
         # Device resolution
         'Resolve-DeviceList'
 
-        # Log retrieval
+        # Log retrieval (ADMIN$ share)
         'Test-AdminShareAccess'
         'Get-RemoteLogFiles'
         'Copy-RemoteLogFiles'
+
+        # Log retrieval (PSRemote)
+        'Test-PSRemoteAccess'
+        'Copy-RemoteLogFilesPSRemote'
+
+        # Evidence saving
+        'Save-EvidenceCopy'
 
         # CMTrace parsing
         'ConvertFrom-CMTraceLog'

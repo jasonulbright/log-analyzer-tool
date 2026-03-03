@@ -2,7 +2,7 @@
 
 A WinForms-based PowerShell GUI for analyzing MECM (Configuration Manager) client logs from remote devices. Retrieves logs via ADMIN$ share, parses CMTrace-format files, translates 100+ error codes to plain English, detects root causes, and exports results to CSV or HTML.
 
-![Log Analyzer](lightmode.png)
+![Log Analyzer](screenshot.png)
 
 ## Requirements
 

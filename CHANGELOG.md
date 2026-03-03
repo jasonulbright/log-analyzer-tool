@@ -2,6 +2,13 @@
 
 All notable changes to the Log Analyzer Tool (LAT) are documented in this file.
 
+## [1.2.1] - 2026-03-03
+
+### Changed
+- Replaced `lightmode.png` screenshot with `screenshot.png`
+
+---
+
 ## [1.2.0] - 2026-02-27
 
 ### Added

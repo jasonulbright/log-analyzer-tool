@@ -2,6 +2,13 @@
 
 All notable changes to the Log Analyzer Tool (LAT) are documented in this file.
 
+## [1.2.2] - 2026-03-04
+
+### Fixed
+- Dark mode restart now captures script path at function scope (`$scriptFile = Join-Path $PSScriptRoot ...`) instead of using `$PSCommandPath` which resolves to empty inside event handler scriptblocks
+
+---
+
 ## [1.2.1] - 2026-03-03
 
 ### Changed

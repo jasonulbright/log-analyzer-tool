@@ -1,6 +1,6 @@
 @{
     RootModule        = 'LogAnalyzerCommon.psm1'
-    ModuleVersion     = '1.1.0'
+    ModuleVersion     = '1.5.0'
     GUID              = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
     Author            = 'Jason Ulbright'
     Description       = 'MECM log retrieval, CMTrace parsing, error code translation, and analysis.'
@@ -38,6 +38,12 @@
         'Invoke-SoftwareUpdateAnalysis'
         'Invoke-ClientInstallAnalysis'
         'Find-LogErrors'
+        'Compress-LogEntries'
+        'Import-SignatureDatabase'
+        'Invoke-SignatureDetection'
+        'Import-EventDatabase'
+        'Group-LogEvents'
+        'Merge-LogTimeline'
         'Test-RebootPending'
 
         # 3010 masking detection

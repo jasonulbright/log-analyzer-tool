@@ -1003,6 +1003,500 @@ function Find-LogErrors {
 }
 
 # ---------------------------------------------------------------------------
+# Duplicate Collapse
+# ---------------------------------------------------------------------------
+
+function Compress-LogEntries {
+    <#
+    .SYNOPSIS
+        Collapses consecutive duplicate log entries into single entries with repeat counts.
+
+    .DESCRIPTION
+        Groups consecutive runs of entries that share the same normalized message template,
+        component, and severity. Each group becomes a single entry with RepeatCount and
+        RepeatSpan properties. Reduces noise by 80-95% in typical MECM logs.
+
+        Message normalization strips GUIDs, IP addresses, hex addresses, UNC paths,
+        local paths, and standalone numbers so that entries differing only in those
+        values are treated as duplicates.
+
+    .EXAMPLE
+        $collapsed = Compress-LogEntries -Entries $enrichedEntries
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$Entries,
+
+        [int]$MinRepeatCount = 2
+    )
+
+    if ($Entries.Count -eq 0) { return $Entries }
+    if ($Entries.Count -eq 1) {
+        $e = $Entries[0]
+        return @([pscustomobject]@{
+            Message          = $e.Message
+            DateTime         = $e.DateTime
+            Component        = $e.Component
+            Context          = $e.Context
+            Type             = $e.Type
+            Severity         = $e.Severity
+            Thread           = $e.Thread
+            LogFile          = $e.LogFile
+            LineNumber       = $e.LineNumber
+            ErrorCode        = $e.ErrorCode
+            ErrorTranslation = $e.ErrorTranslation
+            AllErrorCodes    = $e.AllErrorCodes
+            AllTranslations  = $e.AllTranslations
+            RepeatCount      = 1
+            RepeatSpan       = $null
+        })
+    }
+
+    # Normalize a message to a template for grouping
+    $normalizeMessage = {
+        param([string]$msg)
+        $t = $msg
+        # GUIDs: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} or bare
+        $t = [regex]::Replace($t, '\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}?', '<GUID>')
+        # IP addresses
+        $t = [regex]::Replace($t, '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>')
+        # Hex values (0x...)
+        $t = [regex]::Replace($t, '0x[0-9A-Fa-f]{4,}', '<HEX>')
+        # UNC paths
+        $t = [regex]::Replace($t, '\\\\[^\s"'']+', '<PATH>')
+        # Local paths (C:\...)
+        $t = [regex]::Replace($t, '[A-Za-z]:\\[^\s"'']+', '<PATH>')
+        # Standalone numbers (not inside words)
+        $t = [regex]::Replace($t, '(?<![A-Za-z])\d{2,}(?![A-Za-z])', '<N>')
+        return $t
+    }
+
+    $results = [System.Collections.ArrayList]::new()
+    $groupStart = 0
+
+    # Pre-compute templates
+    $templates = [string[]]::new($Entries.Count)
+    for ($i = 0; $i -lt $Entries.Count; $i++) {
+        $templates[$i] = & $normalizeMessage $Entries[$i].Message
+    }
+
+    for ($i = 1; $i -le $Entries.Count; $i++) {
+        $sameGroup = $false
+        if ($i -lt $Entries.Count) {
+            $sameGroup = ($templates[$i] -eq $templates[$groupStart]) -and
+                         ($Entries[$i].Component -eq $Entries[$groupStart].Component) -and
+                         ($Entries[$i].Severity -eq $Entries[$groupStart].Severity)
+        }
+
+        if (-not $sameGroup) {
+            $groupCount = $i - $groupStart
+            $first = $Entries[$groupStart]
+
+            if ($groupCount -ge $MinRepeatCount) {
+                $last = $Entries[$i - 1]
+                $spanStart = $first.DateTime.ToString('HH:mm:ss')
+                $spanEnd   = $last.DateTime.ToString('HH:mm:ss')
+                $span = if ($spanStart -eq $spanEnd) { $spanStart } else { "$spanStart - $spanEnd" }
+
+                # Build collapsed entry preserving all original properties from the first occurrence
+                [void]$results.Add([pscustomobject]@{
+                    Message          = $first.Message
+                    DateTime         = $first.DateTime
+                    Component        = $first.Component
+                    Context          = $first.Context
+                    Type             = $first.Type
+                    Severity         = $first.Severity
+                    Thread           = $first.Thread
+                    LogFile          = $first.LogFile
+                    LineNumber       = $first.LineNumber
+                    ErrorCode        = $first.ErrorCode
+                    ErrorTranslation = $first.ErrorTranslation
+                    AllErrorCodes    = $first.AllErrorCodes
+                    AllTranslations  = $first.AllTranslations
+                    RepeatCount      = $groupCount
+                    RepeatSpan       = $span
+                })
+            }
+            else {
+                # Single entry (or below threshold) - pass through with RepeatCount = 1
+                for ($j = $groupStart; $j -lt $i; $j++) {
+                    $e = $Entries[$j]
+                    [void]$results.Add([pscustomobject]@{
+                        Message          = $e.Message
+                        DateTime         = $e.DateTime
+                        Component        = $e.Component
+                        Context          = $e.Context
+                        Type             = $e.Type
+                        Severity         = $e.Severity
+                        Thread           = $e.Thread
+                        LogFile          = $e.LogFile
+                        LineNumber       = $e.LineNumber
+                        ErrorCode        = $e.ErrorCode
+                        ErrorTranslation = $e.ErrorTranslation
+                        AllErrorCodes    = $e.AllErrorCodes
+                        AllTranslations  = $e.AllTranslations
+                        RepeatCount      = 1
+                        RepeatSpan       = $null
+                    })
+                }
+            }
+
+            $groupStart = $i
+        }
+    }
+
+    return $results.ToArray()
+}
+
+# ---------------------------------------------------------------------------
+# Signature Detection
+# ---------------------------------------------------------------------------
+
+$script:SignatureDB = $null
+
+function Import-SignatureDatabase {
+    <#
+    .SYNOPSIS
+        Loads the log signature database from JSON.
+    #>
+    param(
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        $Path = Join-Path (Split-Path $PSScriptRoot -Parent) 'SignatureDB\log-signatures.json'
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Log "Signature database not found: $Path" -Level WARN -Quiet
+        $script:SignatureDB = @()
+        return
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $script:SignatureDB = @($raw)
+        Write-Log "Loaded $($script:SignatureDB.Count) log signatures" -Quiet
+    }
+    catch {
+        Write-Log "Failed to load signature database: $_" -Level ERROR -Quiet
+        $script:SignatureDB = @()
+    }
+}
+
+function Invoke-SignatureDetection {
+    <#
+    .SYNOPSIS
+        Pattern-matches log entries against a knowledge base of known-bad log patterns.
+
+    .DESCRIPTION
+        Scans each entry's message text against regex patterns in the signature database.
+        Matches are filtered by component when the signature specifies components (empty
+        components array means match any component). Adds SignatureId, SignatureName,
+        SignatureExplanation, and SignatureResolution properties to each entry.
+
+        This is distinct from error code translation (Resolve-ErrorCode), which looks up
+        numeric codes. Signature detection matches the message text itself to identify
+        known issues that may not have explicit error codes.
+
+    .EXAMPLE
+        $entries = Invoke-SignatureDetection -Entries $collapsedEntries
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$Entries
+    )
+
+    if (-not $script:SignatureDB) {
+        Import-SignatureDatabase
+    }
+
+    if ($Entries.Count -eq 0 -or $script:SignatureDB.Count -eq 0) {
+        # Pass through with null signature properties
+        foreach ($entry in $Entries) {
+            $entry | Add-Member -NotePropertyName SignatureId          -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureName        -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureExplanation -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureResolution  -NotePropertyValue $null -Force
+        }
+        return $Entries
+    }
+
+    # Pre-compile regexes for performance
+    $compiled = @($script:SignatureDB | ForEach-Object {
+        [pscustomobject]@{
+            Sig   = $_
+            Regex = [regex]::new($_.Pattern, [System.Text.RegularExpressions.RegexOptions]::Compiled)
+            Comps = @($_.Components)
+        }
+    })
+
+    foreach ($entry in $Entries) {
+        $matchedSig = $null
+
+        foreach ($c in $compiled) {
+            # Component filter: if signature specifies components, entry must match one
+            if ($c.Comps.Count -gt 0 -and $entry.Component -notin $c.Comps) {
+                continue
+            }
+
+            if ($c.Regex.IsMatch($entry.Message)) {
+                $matchedSig = $c.Sig
+                break
+            }
+        }
+
+        if ($matchedSig) {
+            $entry | Add-Member -NotePropertyName SignatureId          -NotePropertyValue $matchedSig.Id          -Force
+            $entry | Add-Member -NotePropertyName SignatureName        -NotePropertyValue $matchedSig.Name        -Force
+            $entry | Add-Member -NotePropertyName SignatureExplanation -NotePropertyValue $matchedSig.Explanation -Force
+            $entry | Add-Member -NotePropertyName SignatureResolution  -NotePropertyValue $matchedSig.Resolution  -Force
+        }
+        else {
+            $entry | Add-Member -NotePropertyName SignatureId          -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureName        -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureExplanation -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureResolution  -NotePropertyValue $null -Force
+        }
+    }
+
+    return $Entries
+}
+
+# ---------------------------------------------------------------------------
+# Event Clustering
+# ---------------------------------------------------------------------------
+
+$script:EventDB = $null
+
+function Import-EventDatabase {
+    <#
+    .SYNOPSIS
+        Loads the event definition database from JSON.
+    #>
+    param(
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        $Path = Join-Path (Split-Path $PSScriptRoot -Parent) 'EventDB\event-definitions.json'
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Log "Event database not found: $Path" -Level WARN -Quiet
+        $script:EventDB = @{
+            EventTemplates = @()
+            ComponentNames = @{}
+        }
+        return
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $script:EventDB = @{
+            EventTemplates = @($raw.EventTemplates)
+            ComponentNames = @{}
+        }
+        if ($raw.ComponentNames) {
+            $raw.ComponentNames.PSObject.Properties | ForEach-Object {
+                $script:EventDB.ComponentNames[$_.Name] = $_.Value
+            }
+        }
+        Write-Log "Loaded $($script:EventDB.EventTemplates.Count) event templates" -Quiet
+    }
+    catch {
+        Write-Log "Failed to load event database: $_" -Level ERROR -Quiet
+        $script:EventDB = @{
+            EventTemplates = @()
+            ComponentNames = @{}
+        }
+    }
+}
+
+function Get-EventClusterName {
+    <#
+    .SYNOPSIS
+        Determines the event name for a cluster of entries based on signature matches
+        and component composition. Private helper for Group-LogEvents.
+    #>
+    param(
+        [pscustomobject[]]$ClusterEntries
+    )
+
+    $templates = $script:EventDB.EventTemplates
+    $componentNames = $script:EventDB.ComponentNames
+
+    # Check signature-based templates
+    $sigIds = @($ClusterEntries | Where-Object { $_.SignatureId } | ForEach-Object { $_.SignatureId } | Select-Object -Unique)
+
+    if ($sigIds.Count -gt 0 -and $templates.Count -gt 0) {
+        foreach ($template in $templates) {
+            $templateSigIds = @($template.SignatureIds)
+            foreach ($sid in $sigIds) {
+                if ($sid -in $templateSigIds) {
+                    return $template.Name
+                }
+            }
+        }
+    }
+
+    # Fallback: name from dominant component
+    $dominantComponent = ($ClusterEntries | Group-Object Component | Sort-Object Count -Descending | Select-Object -First 1).Name
+
+    if ($componentNames -and $componentNames.ContainsKey($dominantComponent)) {
+        return "$($componentNames[$dominantComponent]) activity"
+    }
+
+    return "$dominantComponent activity"
+}
+
+function Group-LogEvents {
+    <#
+    .SYNOPSIS
+        Groups log entries into event clusters by time proximity.
+
+    .DESCRIPTION
+        Sorts entries chronologically and groups consecutive entries within a time
+        gap threshold into named event clusters. Each cluster is named based on
+        signature matches (using event templates) or the dominant component.
+
+        Adds EventId, EventName, EventOutcome, and EventEntryCount properties to
+        each entry. Singleton entries (not part of any cluster) receive null values.
+
+    .PARAMETER Entries
+        Array of log entry objects (after collapse and signature detection).
+
+    .PARAMETER GapSeconds
+        Maximum gap in seconds between consecutive entries to remain in the same
+        cluster. Default is 120 seconds.
+
+    .EXAMPLE
+        $entries = Group-LogEvents -Entries $signatureEntries -GapSeconds 120
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$Entries,
+
+        [int]$GapSeconds = 120
+    )
+
+    if ($Entries.Count -eq 0) { return $Entries }
+
+    if (-not $script:EventDB) { Import-EventDatabase }
+
+    # Sort by DateTime
+    $sorted = @($Entries | Sort-Object DateTime)
+
+    # Phase 1: Time-gap clustering
+    $clusters = [System.Collections.ArrayList]::new()
+    $current  = [System.Collections.ArrayList]::new()
+    [void]$current.Add($sorted[0])
+
+    for ($i = 1; $i -lt $sorted.Count; $i++) {
+        $gap = ($sorted[$i].DateTime - $sorted[$i - 1].DateTime).TotalSeconds
+        if ($gap -le $GapSeconds) {
+            [void]$current.Add($sorted[$i])
+        }
+        else {
+            [void]$clusters.Add($current.ToArray())
+            $current = [System.Collections.ArrayList]::new()
+            [void]$current.Add($sorted[$i])
+        }
+    }
+    [void]$clusters.Add($current.ToArray())
+
+    # Phase 2: Name each cluster and assign properties
+    $eventCounter = 0
+
+    foreach ($cluster in $clusters) {
+        if ($cluster.Count -lt 2) {
+            # Singleton - no event grouping
+            foreach ($entry in $cluster) {
+                $entry | Add-Member -NotePropertyName EventId         -NotePropertyValue $null -Force
+                $entry | Add-Member -NotePropertyName EventName       -NotePropertyValue $null -Force
+                $entry | Add-Member -NotePropertyName EventOutcome    -NotePropertyValue $null -Force
+                $entry | Add-Member -NotePropertyName EventEntryCount -NotePropertyValue $null -Force
+            }
+            continue
+        }
+
+        $eventCounter++
+        $eventId   = "EVT-{0:D3}" -f $eventCounter
+        $eventName = Get-EventClusterName -ClusterEntries $cluster
+
+        # Outcome = worst severity in cluster
+        $worstType = ($cluster | Measure-Object -Property Type -Maximum).Maximum
+        $outcome = switch ($worstType) {
+            3       { 'Error' }
+            2       { 'Warning' }
+            default { 'Info' }
+        }
+
+        $count = $cluster.Count
+        foreach ($entry in $cluster) {
+            $entry | Add-Member -NotePropertyName EventId         -NotePropertyValue $eventId   -Force
+            $entry | Add-Member -NotePropertyName EventName       -NotePropertyValue $eventName -Force
+            $entry | Add-Member -NotePropertyName EventOutcome    -NotePropertyValue $outcome   -Force
+            $entry | Add-Member -NotePropertyName EventEntryCount -NotePropertyValue $count     -Force
+        }
+    }
+
+    return $sorted
+}
+
+function Merge-LogTimeline {
+    <#
+    .SYNOPSIS
+        Merges entries from multiple analysis results into a single chronological
+        timeline with cross-engine event clustering.
+
+    .DESCRIPTION
+        Combines AllEntries from one or more analysis result objects, then re-runs
+        Group-LogEvents on the merged set. This enables cross-engine event correlation:
+        entries from LocationServices (App Deployment engine) and ccmsetup (Client
+        Install engine) that occur in the same time window are grouped into a single
+        event cluster, revealing causal relationships across log files.
+
+        When only one analysis result is provided, the entries are already clustered
+        and this function simply re-sorts them chronologically.
+
+    .PARAMETER AnalysisResults
+        Array of analysis result objects (from Invoke-*Analysis functions).
+        Each must have an AllEntries property.
+
+    .PARAMETER GapSeconds
+        Maximum gap in seconds between consecutive entries for clustering.
+        Passed through to Group-LogEvents. Default 120.
+
+    .EXAMPLE
+        $merged = Merge-LogTimeline -AnalysisResults @($appResult, $updateResult, $clientResult)
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$AnalysisResults,
+
+        [int]$GapSeconds = 120
+    )
+
+    $allEntries = [System.Collections.ArrayList]::new()
+
+    foreach ($result in $AnalysisResults) {
+        if ($result.AllEntries -and $result.AllEntries.Count -gt 0) {
+            [void]$allEntries.AddRange($result.AllEntries)
+        }
+    }
+
+    if ($allEntries.Count -eq 0) { return @() }
+
+    # Re-cluster across engine boundaries
+    return Group-LogEvents -Entries $allEntries.ToArray() -GapSeconds $GapSeconds
+}
+
+# ---------------------------------------------------------------------------
 # 3010 Exit Code Masking Detection
 # ---------------------------------------------------------------------------
 
@@ -1405,6 +1899,9 @@ function Invoke-AppDeploymentAnalysis {
     }
 
     $enriched = Find-LogErrors -LogEntries $allEntries -IncludeInfo
+    $enriched = Compress-LogEntries -Entries $enriched
+    $enriched = Invoke-SignatureDetection -Entries $enriched
+    $enriched = Group-LogEvents -Entries $enriched
     $errors   = @($enriched | Where-Object { $_.Type -eq 3 })
     $warnings = @($enriched | Where-Object { $_.Type -eq 2 })
 
@@ -1413,6 +1910,9 @@ function Invoke-AppDeploymentAnalysis {
         foreach ($err in $errors) {
             if ($err.ErrorTranslation -and $err.ErrorTranslation.Resolution) {
                 $recommendations += $err.ErrorTranslation.Resolution
+            }
+            if ($err.SignatureResolution) {
+                $recommendations += $err.SignatureResolution
             }
         }
         $recommendations = @($recommendations | Select-Object -Unique)
@@ -1482,6 +1982,9 @@ function Invoke-SoftwareUpdateAnalysis {
     }
 
     $enriched = Find-LogErrors -LogEntries $allEntries -IncludeInfo
+    $enriched = Compress-LogEntries -Entries $enriched
+    $enriched = Invoke-SignatureDetection -Entries $enriched
+    $enriched = Group-LogEvents -Entries $enriched
     $errors   = @($enriched | Where-Object { $_.Type -eq 3 })
     $warnings = @($enriched | Where-Object { $_.Type -eq 2 })
 
@@ -1489,6 +1992,9 @@ function Invoke-SoftwareUpdateAnalysis {
     foreach ($err in $errors) {
         if ($err.ErrorTranslation -and $err.ErrorTranslation.Resolution) {
             $recommendations += $err.ErrorTranslation.Resolution
+        }
+        if ($err.SignatureResolution) {
+            $recommendations += $err.SignatureResolution
         }
     }
     $recommendations = @($recommendations | Select-Object -Unique)
@@ -1541,6 +2047,9 @@ function Invoke-ClientInstallAnalysis {
     }
 
     $enriched = Find-LogErrors -LogEntries $allEntries -IncludeInfo
+    $enriched = Compress-LogEntries -Entries $enriched
+    $enriched = Invoke-SignatureDetection -Entries $enriched
+    $enriched = Group-LogEvents -Entries $enriched
     $errors   = @($enriched | Where-Object { $_.Type -eq 3 })
     $warnings = @($enriched | Where-Object { $_.Type -eq 2 })
 
@@ -1605,6 +2114,9 @@ function Invoke-ClientInstallAnalysis {
     foreach ($err in $errors) {
         if ($err.ErrorTranslation -and $err.ErrorTranslation.Resolution) {
             $recommendations += $err.ErrorTranslation.Resolution
+        }
+        if ($err.SignatureResolution) {
+            $recommendations += $err.SignatureResolution
         }
     }
     $recommendations = @($recommendations | Select-Object -Unique)

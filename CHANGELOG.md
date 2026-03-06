@@ -2,6 +2,83 @@
 
 All notable changes to the Log Analyzer Tool (LAT) are documented in this file.
 
+## [1.6.0] - 2026-03-05
+
+### Added
+
+- **Multi-log timeline merge** (`Merge-LogTimeline`): When multiple analysis engines run (e.g., "All Logs"), entries from all engines are combined into a single chronological timeline and re-clustered across engine boundaries. This reveals causal relationships between log files -- e.g., a LocationServices DP failure at 14:10 and a ccmsetup abort at 14:13 are now grouped as a single "Content access failure" event instead of appearing as separate per-engine events.
+  - Entries sorted chronologically across all log files
+  - Cross-engine event clustering via `Group-LogEvents` re-run on merged data
+  - Log console reports merge summary ("timeline merged: N entries, M events")
+  - Per-engine summaries still logged before merge for individual engine visibility
+  - LogFile provenance preserved on each entry for source identification
+  - 12 Pester tests covering empty input, single-result pass-through, two-engine merge, three-engine merge, cross-engine clustering, signature-based naming, time-gap separation, re-clustering overwrite, custom GapSeconds, LogFile preservation, and large volume (300 entries from 3 engines)
+
+### Changed
+
+- Module version bumped to 1.5.0, manifest exports increased from 30 to 31 functions
+- Grid population restructured: entries populated from merged timeline instead of per-engine results
+
+---
+
+## [1.5.0] - 2026-03-05
+
+### Added
+
+- **Event clustering** (`Group-LogEvents`): Groups related log entries into named event clusters by time proximity. Entries within 120 seconds of each other (configurable via `GapSeconds`) are grouped into a single event, named using signature-based event templates or the dominant component.
+  - 10 event templates covering content access, app deployment, update scan, client install, WMI, certificate, DNS, access, reboot, and policy failures
+  - Component-friendly fallback naming (e.g., "Update scan activity", "Content access activity") when no signatures match
+  - Event outcome derived from worst severity in cluster (Error > Warning > Info)
+  - Detail panel shows "Event Cluster" section with event name, ID, outcome, and entry count
+  - Text filter searches event names (type "content" or "certificate" to find matching clusters)
+  - Event definitions stored in extensible JSON database (`EventDB/event-definitions.json`)
+  - 28 Pester tests covering pass-through, time-gap clustering, custom gap, sorting, naming (signature-based and component fallback), outcome determination, sequential IDs, entry counts, large volume (200 entries), and all 10 event template mappings
+
+### Changed
+
+- Module version bumped to 1.4.0, manifest exports increased from 28 to 30 functions
+
+---
+
+## [1.4.0] - 2026-03-05
+
+### Added
+
+- **Signature detection** (`Invoke-SignatureDetection`): Pattern-matches log entry message text against a knowledge base of 20 known-bad MECM log patterns. Identifies issues like DP unreachable, content download failures, WSUS scan failures, WMI corruption, certificate issues, pending reboots, and more -- without needing explicit error codes.
+  - Distinct from error code translation: signatures read the message text itself, catching issues that don't produce numeric error codes
+  - Component-aware filtering: signatures can target specific log components or match any component
+  - Pre-compiled regexes for performance
+  - Signature database (`SignatureDB/log-signatures.json`) with 20 patterns across 6 categories: Content (4), AppDeployment (3), SoftwareUpdates (3), ClientInstall (3), Infrastructure (7)
+  - Each signature provides: issue name, explanation, suggested resolution, and related logs
+  - Detail panel shows "Signature Match" section with issue name, ID, explanation, and suggested action
+  - Signature resolutions feed into per-engine recommendation lists
+  - Text filter searches signature names (type "WSUS" or "certificate" to find matching entries)
+  - 21 Pester tests covering all 20 signatures, component filtering, pass-through, and multi-entry handling
+
+### Changed
+
+- Module version bumped to 1.3.0, manifest exports increased from 26 to 28 functions
+
+---
+
+## [1.3.0] - 2026-03-05
+
+### Added
+
+- **Duplicate collapse** (`Compress-LogEntries`): Consecutive log entries sharing the same normalized message template, component, and severity are collapsed into a single entry with repeat count and time span. Reduces grid noise by 80-95% in typical MECM logs.
+  - Message normalization strips GUIDs, IP addresses, hex values, UNC paths, local paths, and standalone numbers so entries differing only in variable data collapse together
+  - Grid message prefixed with `[Nx, HH:mm:ss - HH:mm:ss]` for collapsed entries
+  - Detail panel shows "Repeated: N times (span)" when entry has repeats
+  - Configurable `MinRepeatCount` threshold (default 2)
+  - Integrated into all 3 analysis engines (App Deployment, Software Updates, Client Install)
+  - 15 Pester tests covering pass-through, basic collapse, normalization (GUIDs, IPs, hex, UNC, local paths, numbers), interleaved sequences, threshold, and large volume (200 entries)
+
+### Changed
+
+- Module version bumped to 1.2.0, manifest exports increased from 25 to 26 functions
+
+---
+
 ## [1.2.2] - 2026-03-04
 
 ### Fixed

@@ -987,6 +987,16 @@ $dt = New-Object System.Data.DataTable
 [void]$dt.Columns.Add("FullMessage", [string])
 [void]$dt.Columns.Add("Resolution", [string])
 [void]$dt.Columns.Add("LogsToCheck", [string])
+[void]$dt.Columns.Add("RepeatCount", [int])
+[void]$dt.Columns.Add("RepeatSpan", [string])
+[void]$dt.Columns.Add("SignatureId", [string])
+[void]$dt.Columns.Add("SignatureName", [string])
+[void]$dt.Columns.Add("SignatureExplanation", [string])
+[void]$dt.Columns.Add("SignatureResolution", [string])
+[void]$dt.Columns.Add("EventId", [string])
+[void]$dt.Columns.Add("EventName", [string])
+[void]$dt.Columns.Add("EventOutcome", [string])
+[void]$dt.Columns.Add("EventEntryCount", [int])
 
 $grid.DataSource = $dt
 
@@ -1056,8 +1066,14 @@ $grid.Add_SelectionChanged({
     $lines += "Component:   $($row['Component'])"
     $lines += ""
 
+    $rc = [int]$row['RepeatCount']
+    if ($rc -gt 1) {
+        $lines += "Repeated:    $rc times ($($row['RepeatSpan']))"
+    }
+
     $fullMsg = [string]$row['FullMessage']
     if (-not [string]::IsNullOrWhiteSpace($fullMsg)) {
+        $lines += ""
         $lines += "Message:"
         $lines += $fullMsg
         $lines += ""
@@ -1082,6 +1098,37 @@ $grid.Add_SelectionChanged({
     $logs = [string]$row['LogsToCheck']
     if (-not [string]::IsNullOrWhiteSpace($logs)) {
         $lines += "Check Logs:  $logs"
+    }
+
+    $sigName = [string]$row['SignatureName']
+    if (-not [string]::IsNullOrWhiteSpace($sigName)) {
+        $lines += ""
+        $lines += "--- Signature Match ---"
+        $lines += "Issue:       $sigName [$([string]$row['SignatureId'])]"
+        $sigExpl = [string]$row['SignatureExplanation']
+        if (-not [string]::IsNullOrWhiteSpace($sigExpl)) {
+            $lines += ""
+            $lines += "Explanation:"
+            $lines += $sigExpl
+        }
+        $sigRes = [string]$row['SignatureResolution']
+        if (-not [string]::IsNullOrWhiteSpace($sigRes)) {
+            $lines += ""
+            $lines += "Suggested Action:"
+            $lines += $sigRes
+        }
+    }
+
+    $evtName = [string]$row['EventName']
+    if (-not [string]::IsNullOrWhiteSpace($evtName)) {
+        $lines += ""
+        $lines += "--- Event Cluster ---"
+        $lines += "Event:       $evtName [$([string]$row['EventId'])]"
+        $lines += "Outcome:     $([string]$row['EventOutcome'])"
+        $evtCount = [int]$row['EventEntryCount']
+        if ($evtCount -gt 0) {
+            $lines += "Entries:     $evtCount entries in this cluster"
+        }
     }
 
     $txtDetail.Text = ($lines -join "`r`n")
@@ -1252,17 +1299,25 @@ $btnAnalyze.Add_Click({
             $results += $clientResult
         }
 
-        # Populate grid from results
+        # Log per-engine summaries and store results
         foreach ($result in $results) {
             $script:AnalysisResults += $result
-
             $entries = if ($result.AllEntries) { $result.AllEntries } else { @() }
             $errorCount   = if ($result.Errors) { $result.Errors.Count } else { 0 }
             $warningCount = if ($result.Warnings) { $result.Warnings.Count } else { 0 }
-
             Add-LogLine -TextBox $txtLog -Message "$hostname [$($result.AnalysisType)]: $($entries.Count) entries, $errorCount error(s), $warningCount warning(s)"
+        }
 
-            foreach ($entry in $entries) {
+        # Merge timeline across engines (re-clusters cross-engine entries by time)
+        $mergedEntries = Merge-LogTimeline -AnalysisResults $results
+        if ($results.Count -gt 1 -and $mergedEntries.Count -gt 0) {
+            $eventCount = @($mergedEntries | Where-Object { $_.EventId } | ForEach-Object { $_.EventId } | Select-Object -Unique).Count
+            Add-LogLine -TextBox $txtLog -Message "$hostname timeline merged: $($mergedEntries.Count) entries, $eventCount event(s)"
+        }
+        [System.Windows.Forms.Application]::DoEvents()
+
+        # Populate grid from merged timeline
+        foreach ($entry in $mergedEntries) {
                 $translation = ''
                 $resolution  = ''
                 $logsToCheck = ''
@@ -1280,6 +1335,20 @@ $btnAnalyze.Add_Click({
                     $msgTruncated = $msgTruncated.Substring(0, 300) + '...'
                 }
 
+                $repeatCount = if ($entry.RepeatCount) { $entry.RepeatCount } else { 1 }
+                $repeatSpan  = if ($entry.RepeatSpan)  { $entry.RepeatSpan }  else { '' }
+
+                # Append repeat indicator to the grid message
+                if ($repeatCount -gt 1) {
+                    $msgTruncated = "[$($repeatCount)x, $repeatSpan] $msgTruncated"
+                }
+
+                # Signature match indicator
+                $sigId   = if ($entry.SignatureId)   { $entry.SignatureId }   else { '' }
+                $sigName = if ($entry.SignatureName)  { $entry.SignatureName } else { '' }
+                $sigExpl = if ($entry.SignatureExplanation) { $entry.SignatureExplanation } else { '' }
+                $sigRes  = if ($entry.SignatureResolution)  { $entry.SignatureResolution }  else { '' }
+
                 $newRow = $dt.NewRow()
                 $newRow["Device"]      = $hostname
                 $newRow["LogFile"]     = $entry.LogFile
@@ -1294,11 +1363,18 @@ $btnAnalyze.Add_Click({
                 $newRow["FullMessage"] = $entry.Message
                 $newRow["Resolution"]  = $resolution
                 $newRow["LogsToCheck"] = $logsToCheck
+                $newRow["RepeatCount"] = $repeatCount
+                $newRow["RepeatSpan"]  = $repeatSpan
+                $newRow["SignatureId"]          = $sigId
+                $newRow["SignatureName"]        = $sigName
+                $newRow["SignatureExplanation"] = $sigExpl
+                $newRow["SignatureResolution"]  = $sigRes
+                $newRow["EventId"]             = if ($entry.EventId)      { $entry.EventId }      else { '' }
+                $newRow["EventName"]           = if ($entry.EventName)    { $entry.EventName }    else { '' }
+                $newRow["EventOutcome"]        = if ($entry.EventOutcome) { $entry.EventOutcome } else { '' }
+                $newRow["EventEntryCount"]     = if ($entry.EventEntryCount) { $entry.EventEntryCount } else { 0 }
                 $dt.Rows.Add($newRow)
             }
-        }
-
-        [System.Windows.Forms.Application]::DoEvents()
     }
 
     # Apply default filter (hide Info unless checkbox is checked)
@@ -1338,7 +1414,7 @@ $txtFilter.Add_TextChanged({
         $dt.DefaultView.RowFilter = $baseFilter
     } else {
         $escaped = $filterText.Replace("'", "''")
-        $msgFilter = "Message LIKE '*$escaped*' OR ErrorCode LIKE '*$escaped*' OR Translation LIKE '*$escaped*' OR Component LIKE '*$escaped*'"
+        $msgFilter = "Message LIKE '*$escaped*' OR ErrorCode LIKE '*$escaped*' OR Translation LIKE '*$escaped*' OR Component LIKE '*$escaped*' OR SignatureName LIKE '*$escaped*' OR EventName LIKE '*$escaped*'"
         if ($baseFilter) {
             $dt.DefaultView.RowFilter = "($baseFilter) AND ($msgFilter)"
         } else {

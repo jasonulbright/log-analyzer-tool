@@ -1,0 +1,78 @@
+{
+    "EventTemplates": [
+        {
+            "Id": "EVT-CONTENT",
+            "Name": "Content access failure",
+            "SignatureIds": ["DP-001", "DP-002", "DP-003", "CACHE-001", "BITS-001"],
+            "Description": "Client could not locate or download content from distribution points"
+        },
+        {
+            "Id": "EVT-APP-FAIL",
+            "Name": "Application deployment failure",
+            "SignatureIds": ["APP-001", "APP-002", "APP-003"],
+            "Description": "Application install or detection failed"
+        },
+        {
+            "Id": "EVT-SCAN-FAIL",
+            "Name": "Update scan failure",
+            "SignatureIds": ["WUA-001", "WUA-002", "WUA-003"],
+            "Description": "Software update scan against WSUS failed"
+        },
+        {
+            "Id": "EVT-CLIENT-FAIL",
+            "Name": "Client installation failure",
+            "SignatureIds": ["CCM-001", "CCM-002", "CCM-003"],
+            "Description": "SCCM client installation or upgrade failed"
+        },
+        {
+            "Id": "EVT-WMI",
+            "Name": "WMI repository corruption",
+            "SignatureIds": ["WMI-001"],
+            "Description": "WMI namespace or repository is corrupted"
+        },
+        {
+            "Id": "EVT-CERT",
+            "Name": "Certificate issue",
+            "SignatureIds": ["CERT-001"],
+            "Description": "Client certificate expired or missing"
+        },
+        {
+            "Id": "EVT-DNS",
+            "Name": "DNS resolution failure",
+            "SignatureIds": ["DNS-001"],
+            "Description": "Client cannot resolve server hostname"
+        },
+        {
+            "Id": "EVT-ACCESS",
+            "Name": "Access denied",
+            "SignatureIds": ["ACCESS-001"],
+            "Description": "Permission denied accessing resource"
+        },
+        {
+            "Id": "EVT-REBOOT",
+            "Name": "Pending reboot",
+            "SignatureIds": ["REBOOT-001"],
+            "Description": "System reboot required before operation can proceed"
+        },
+        {
+            "Id": "EVT-POLICY",
+            "Name": "Policy processing failure",
+            "SignatureIds": ["POLICY-001"],
+            "Description": "Client policy evaluation or download failed"
+        }
+    ],
+    "ComponentNames": {
+        "AppEnforce": "App enforcement",
+        "AppDiscovery": "App detection",
+        "CAS": "Content access",
+        "ContentTransferManager": "Content transfer",
+        "LocationServices": "Location services",
+        "WUAHandler": "Update scan",
+        "UpdatesDeployment": "Update deployment",
+        "UpdatesHandler": "Update handler",
+        "UpdatesStore": "Update store",
+        "ccmsetup": "Client setup",
+        "client.msi": "Client MSI install",
+        "MicrosoftPolicyPlatformSetup.msi": "Policy Platform setup"
+    }
+}

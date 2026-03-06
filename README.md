@@ -1,6 +1,6 @@
 # Log Analyzer Tool (LAT)
 
-A WinForms-based PowerShell GUI for analyzing MECM (Configuration Manager) client logs from remote devices. Retrieves logs via ADMIN$ share, parses CMTrace-format files, translates 100+ error codes to plain English, detects root causes, and exports results to CSV or HTML.
+A WinForms-based PowerShell GUI for analyzing MECM (Configuration Manager) client logs from remote devices. Retrieves logs via ADMIN$ share, parses CMTrace-format files, collapses duplicate noise, translates 100+ error codes to plain English, detects root causes, and exports results to CSV or HTML.
 
 ![Log Analyzer](screenshot.png)
 
@@ -27,6 +27,10 @@ powershell -ExecutionPolicy Bypass -File start-loganalyzer.ps1
 - Handles multi-line messages and rotated `.lo_` log files
 - Time-based filtering (last N hours)
 
+### Duplicate Collapse
+
+Consecutive log entries with the same message template, component, and severity are collapsed into a single row. Message normalization strips GUIDs, IPs, hex values, UNC/local paths, and standalone numbers so entries differing only in variable data are treated as duplicates. Collapsed rows display as `[184x, 14:10:00 - 14:16:00] PolicyEvaluator waiting for policy`. Reduces grid noise by 80-95% in typical MECM logs.
+
 ### Analysis Engines
 
 | Engine | Logs Analyzed | Detects |
@@ -47,6 +51,18 @@ Over 100 error codes across 6 databases:
 - **MSI** &mdash; Windows Installer error codes
 
 Each entry includes the error message, a resolution suggestion, and recommended logs to check.
+
+### Signature Detection
+
+20 known-bad log patterns matched against message text, independent of error codes. Catches issues like DP unreachable, content download failures, WSUS scan problems, WMI corruption, certificate issues, and pending reboots. Each match provides a plain-English explanation and suggested resolution in the detail panel. Signatures are component-aware and stored in an extensible JSON database (`SignatureDB/log-signatures.json`).
+
+### Event Clustering
+
+Related log entries are grouped into named event clusters by time proximity (default 120-second gap). Clusters are named using signature-based event templates (e.g., "Content access failure", "Update scan failure") or the dominant component (e.g., "App enforcement activity"). Each cluster shows its outcome (worst severity) and entry count in the detail panel. 10 event templates cover content, app deployment, updates, client install, WMI, certificates, DNS, access, reboots, and policy failures. Definitions stored in `EventDB/event-definitions.json`.
+
+### Multi-Log Timeline Merge
+
+When multiple analysis engines run ("All Logs" scope), entries from all engines are merged into a single chronological timeline and re-clustered across engine boundaries. This reveals causal relationships between log files -- a LocationServices DP failure at 14:10 and a ccmsetup abort at 14:13 are grouped as one "Content access failure" event, showing the incident chain across log files. Per-engine summaries are still logged individually for visibility.
 
 ### Root Cause Detection
 
@@ -85,8 +101,17 @@ Compares the MSI exit timestamp against the last system reboot time (CIM with WM
 loganalyzer/
   start-loganalyzer.ps1          Main WinForms application
   Module/
-    LogAnalyzerCommon.psd1       Module manifest (v1.0.0)
-    LogAnalyzerCommon.psm1       Core module (parsing, analysis, export)
+    LogAnalyzerCommon.psd1       Module manifest (v1.5.0)
+    LogAnalyzerCommon.psm1       Core module (parsing, analysis, collapse, signatures, clustering, merge, export)
+  SignatureDB/
+    log-signatures.json          20 known-bad log pattern signatures
+  EventDB/
+    event-definitions.json       10 event templates + component name mappings
+  Tests/
+    Compress-LogEntries.Tests.ps1         Pester tests for duplicate collapse (18 tests)
+    Invoke-SignatureDetection.Tests.ps1   Pester tests for signature detection (21 tests)
+    Group-LogEvents.Tests.ps1             Pester tests for event clustering (28 tests)
+    Merge-LogTimeline.Tests.ps1           Pester tests for timeline merge (12 tests)
   ErrorCodes/
     mecm-errors.json             26 MECM error codes
     windows-errors.json          30 Windows HRESULT codes

@@ -1,4 +1,4 @@
-# Log Analyzer Tool (LAT)
+# Log Analyzer Tool
 
 A WinForms-based PowerShell GUI for analyzing MECM (Configuration Manager) client logs from remote devices. Retrieves logs via ADMIN$ share, parses CMTrace-format files, collapses duplicate noise, translates 100+ error codes to plain English, detects root causes, and exports results to CSV or HTML.
 

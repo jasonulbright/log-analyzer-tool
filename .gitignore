@@ -7,3 +7,4 @@ Reports/
 # Per-user settings
 LogAnalyzer.windowstate.json
 LogAnalyzer.prefs.json
+project-manifest.json

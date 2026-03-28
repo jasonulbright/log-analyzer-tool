@@ -3,5 +3,5 @@
   "Status": "active",
   "Category": "MECM",
   "ValidationSchedule": "monthly",
-  "Notes": "MECM client log analysis with incident clustering. Future: C# + Fluent UI conversion."
+  "Notes": "WinForms MECM log analyzer. v1.6.0 with incident clustering. 3 GitHub issues closed (dark mode, context rows, non-actionable warnings). Pending: C# + Fluent UI conversion."
 }

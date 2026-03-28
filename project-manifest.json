@@ -1,0 +1,7 @@
+{
+  "ProjectType": "mecm-tool",
+  "Status": "active",
+  "Category": "MECM",
+  "ValidationSchedule": "monthly",
+  "Notes": "MECM client log analysis with incident clustering. Future: C# + Fluent UI conversion."
+}

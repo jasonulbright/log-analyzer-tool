@@ -1,0 +1,24 @@
+{
+    "id": "wmi-corruption",
+    "scope": "CrossScope",
+    "confidence": 70,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "WMI-001" }
+        ]
+    },
+    "verdict": "WMI errors detected. The repository or a provider is misbehaving. Many MECM client functions depend on WMI, so one bad namespace cascades into multiple visible failures.",
+    "evidence": [
+        { "component": "CcmExec", "match": "WMI" },
+        { "component": "ccmsetup", "match": "WMI" }
+    ],
+    "fix": "Check repository consistency: `winmgmt /verifyrepository`. If inconsistent, `winmgmt /salvagerepository` first. Use `/resetrepository` only as a last resort (destroys the CCM namespace; follow with `ccmsetup.exe /forceinstall`). Before a reset, capture the WMI-Activity operational event log so the specific failing provider is preserved for later root-cause review.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/windows-server/system-management-components/rebuild-wmi-repository",
+        "https://learn.microsoft.com/windows/win32/wmisdk/wmi-start-page"
+    ]
+}

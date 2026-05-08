@@ -1,0 +1,28 @@
+{
+    "id": "appv-proxy-fqdn-bypass",
+    "scope": "App",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "AppEnforce", "pattern": "(?i)App-?V" }
+        ],
+        "any": [
+            { "component": "AppEnforce", "pattern": "(?i)stream" },
+            { "component": "AppEnforce", "pattern": "(?i)proxy" }
+        ]
+    },
+    "verdict": "App-V app cannot stream from the DP because the client's proxy routes the request externally. Windows' proxy bypass does not treat FQDNs containing a dot as 'local', so the local-bypass flag does not cover the DP.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "App-V" },
+        { "component": "AppEnforce", "match": "stream" }
+    ],
+    "fix": "Add the DP's FQDN to the `Do not use proxy server for addresses beginning with` list in the client proxy settings (GPO or manual). For example: add `myserver.contoso.com` as its own exclusion, not just the leaf name. Alternatively add the DP FQDN to the Local Address Table (LAT) on the upstream proxy. This is a Windows proxy quirk, not an App-V bug; any FQDN-addressed internal server needs the same treatment.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/content-management/app-v-apps-not-streamed-from-dp",
+        "https://learn.microsoft.com/mem/configmgr/apps/get-started/deploying-app-v-virtual-applications"
+    ]
+}

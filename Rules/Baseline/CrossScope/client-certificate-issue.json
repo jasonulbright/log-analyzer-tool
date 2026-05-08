@@ -1,0 +1,24 @@
+{
+    "id": "client-certificate-issue",
+    "scope": "CrossScope",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CERT-001" }
+        ]
+    },
+    "verdict": "A client PKI certificate error was observed. The client's machine certificate may be expired, revoked, untrusted, or missing entirely. This blocks HTTPS communication with site systems.",
+    "evidence": [
+        { "component": "ClientIDManagerStartup", "match": "certificate" },
+        { "component": "CertificateMaintenance", "match": "certificate" }
+    ],
+    "fix": "From an elevated prompt: `Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.Subject -match $env:COMPUTERNAME }`. Verify the certificate is present, not expired, and chains to a CA the MP trusts. For autoenroll, run `gpupdate /target:computer /force` then `certutil -pulse`. If the issuing CA moved (common after PKI migrations), re-push the root trust via GPO.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/security/fundamentals",
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/network/pki-certificate-requirements"
+    ]
+}

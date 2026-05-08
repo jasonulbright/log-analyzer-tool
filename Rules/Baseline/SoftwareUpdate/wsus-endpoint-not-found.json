@@ -1,0 +1,23 @@
+{
+    "id": "wsus-endpoint-not-found",
+    "scope": "SoftwareUpdate",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80244019" }
+        ]
+    },
+    "verdict": "HTTP 404 from WSUS. The URL the client is using does not exist on the WSUS server. Usually the SUP virtual directory is missing or was renamed.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80244019" }
+    ],
+    "fix": "On the SUP server, in IIS confirm the `ClientWebService` and `SimpleAuthWebService` virtual directories exist under the `WSUS Administration` site and respond to `GET /SimpleAuthWebService/SimpleAuth.asmx`. From the client, inspect the target URL: `Get-ItemProperty HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate WUServer, WUStatusServer`. If the FQDN or port is wrong, re-deploy the SUP or fix the WSUS GPO.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/sum/troubleshoot/software-update-point-issues",
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-errors"
+    ]
+}

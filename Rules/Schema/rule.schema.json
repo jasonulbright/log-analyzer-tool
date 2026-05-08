@@ -1,0 +1,170 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://log-analyzer-tool/rule.schema.json",
+    "title": "LAT decision-engine rule",
+    "description": "A single decision-engine rule. A rule fires when its `when` clause evaluates true against a parsed log bundle and produces a verdict + evidence + fix.",
+    "type": "object",
+    "required": ["id", "scope", "confidence", "version", "when", "verdict", "fix"],
+    "additionalProperties": false,
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Globally unique kebab-case slug. Stable across rule edits; bumped only on semantic identity change.",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "minLength": 3,
+            "maxLength": 80
+        },
+        "scope": {
+            "type": "string",
+            "description": "Analysis engine that owns the rule. Drives module routing in the UI.",
+            "enum": ["App", "SoftwareUpdate", "ClientInstall", "CrossScope"]
+        },
+        "confidence": {
+            "type": "integer",
+            "description": "Authoring confidence 0-100. Multiplied by specificity in the ranker. Baseline rules should be >=70.",
+            "minimum": 0,
+            "maximum": 100
+        },
+        "version": {
+            "type": "string",
+            "description": "Rule body version, bumped on edit. Major.minor; used by incident-replay to detect schema drift.",
+            "pattern": "^\\d+\\.\\d+$"
+        },
+        "authoredAt": {
+            "type": "string",
+            "description": "ISO-8601 date the rule was first authored or last edited.",
+            "format": "date"
+        },
+        "authoredBy": {
+            "type": "string",
+            "description": "Identifier for the rule author. Free-form; brand convention is a short handle."
+        },
+        "source": {
+            "type": "string",
+            "description": "Origin of the rule. Local overlay always wins on conflict regardless of source.",
+            "enum": ["baseline", "local", "community"]
+        },
+        "when": {
+            "type": "object",
+            "description": "Boolean evaluation: ALL of `all` AND NONE of `none` AND (empty(any) OR ANY of `any`).",
+            "additionalProperties": false,
+            "required": ["all"],
+            "properties": {
+                "all": { "type": "array", "items": { "$ref": "#/definitions/condition" }, "minItems": 1 },
+                "any": { "type": "array", "items": { "$ref": "#/definitions/condition" } },
+                "none": { "type": "array", "items": { "$ref": "#/definitions/condition" } }
+            }
+        },
+        "causalOrder": {
+            "type": "array",
+            "description": "Earliest to latest. Hint to the ranker for tie-break and to the verdict card for the evidence ordering.",
+            "items": {
+                "type": "object",
+                "required": ["role"],
+                "additionalProperties": false,
+                "properties": {
+                    "signature": { "type": "string" },
+                    "errorCode": { "type": "string" },
+                    "probe": { "type": "string" },
+                    "cluster": { "type": "string" },
+                    "role": { "type": "string", "enum": ["root", "trigger", "symptom", "consequence"] }
+                }
+            }
+        },
+        "verdict": {
+            "type": "string",
+            "description": "One-sentence plain-English root cause. Shown as the verdict card headline.",
+            "minLength": 10,
+            "maxLength": 240
+        },
+        "evidence": {
+            "type": "array",
+            "description": "Shortlist of log entries the verdict card surfaces. Each entry is matched against parsed log lines at evaluation time.",
+            "items": {
+                "type": "object",
+                "required": ["match"],
+                "additionalProperties": false,
+                "properties": {
+                    "component": { "type": "string", "description": "Optional component scope (e.g. `ccmsetup`, `LocationServices`)." },
+                    "match": { "type": "string", "description": "Substring or regex matched against entry.Message." },
+                    "isRegex": { "type": "boolean", "description": "Treat `match` as a regex when true. Default false (substring)." }
+                }
+            },
+            "maxItems": 5
+        },
+        "fix": {
+            "type": "string",
+            "description": "Suggested remediation, one short paragraph. Shown beneath the verdict.",
+            "minLength": 10,
+            "maxLength": 600
+        },
+        "references": {
+            "type": "array",
+            "description": "Authoritative URLs (MS Learn preferred). Surfaced as `Read more` links on the verdict card.",
+            "items": { "type": "string", "format": "uri" }
+        }
+    },
+    "definitions": {
+        "condition": {
+            "type": "object",
+            "description": "A single condition in a `when` clause. Discriminator field selects the type.",
+            "oneOf": [
+                {
+                    "required": ["signature"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "signature": { "type": "string", "description": "Signature ID from SignatureDB/log-signatures.json that must have fired." }
+                    }
+                },
+                {
+                    "required": ["errorCode"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "errorCode": { "type": "string", "description": "Error code (decimal or 0xHEX) from any ErrorCodes/*.json that must have appeared." },
+                        "component": { "type": "string", "description": "Optional component scope to constrain the match." }
+                    }
+                },
+                {
+                    "required": ["probe"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "probe": { "type": "string", "description": "Probe name from the root-cause probe registry." },
+                        "result": { "type": "string", "description": "Required probe result (typically `Fail`, `Pass`, `Warn`, or a specific string)." }
+                    }
+                },
+                {
+                    "required": ["cluster"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "cluster": { "type": "string", "description": "Event template ID from EventDB/event-definitions.json that Group-LogEvents produced." }
+                    }
+                },
+                {
+                    "required": ["component", "pattern"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "component": { "type": "string", "description": "Component to search within." },
+                        "pattern": { "type": "string", "description": "Regex matched against entry.Message in that component." }
+                    }
+                },
+                {
+                    "required": ["timeGap"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "timeGap": {
+                            "type": "object",
+                            "required": ["fromSignature", "toSignature", "maxSec"],
+                            "additionalProperties": false,
+                            "properties": {
+                                "fromSignature": { "type": "string" },
+                                "toSignature": { "type": "string" },
+                                "maxSec": { "type": "integer", "minimum": 0 }
+                            },
+                            "description": "Two signatures fired within `maxSec` seconds, in order."
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}

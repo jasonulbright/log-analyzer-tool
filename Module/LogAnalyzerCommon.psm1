@@ -1,0 +1,2449 @@
+<#
+.SYNOPSIS
+    Core module for LogAnalyzerTool (LAT).
+
+.DESCRIPTION
+    Import this module to get:
+      - Structured logging (Initialize-Logging, Write-Log)
+      - Device list resolution (Resolve-DeviceList)
+      - ADMIN$ share log retrieval (Test-AdminShareAccess, Get-RemoteLogFiles, Copy-RemoteLogFiles)
+      - CMTrace log parsing (ConvertFrom-CMTraceLog)
+      - Error code translation (Import-ErrorCodeDatabase, Resolve-ErrorCode)
+      - Analysis engines (Invoke-AppDeploymentAnalysis, Invoke-SoftwareUpdateAnalysis, Invoke-ClientInstallAnalysis)
+      - 3010 exit code masking detection (Get-ClientMsiExitCode, Get-LastRebootTime, Test-3010RebootPending)
+      - Root cause detection (Test-FirewallBlock, Test-DomainJoined, Test-DnsResolution, Test-MppCorruption)
+      - Export (Export-AnalysisCsv, Export-AnalysisHtml, New-AnalysisSummary)
+
+.EXAMPLE
+    Import-Module "$PSScriptRoot\Module\LogAnalyzerCommon.psd1" -Force
+    Initialize-Logging -LogPath "C:\temp\lat.log"
+
+    $entries = ConvertFrom-CMTraceLog -Path "\\SERVER01\C$\Windows\CCM\Logs\AppEnforce.log"
+    $entries | Where-Object { $_.Type -eq 3 } | Format-Table DateTime, Component, Message
+#>
+
+# ---------------------------------------------------------------------------
+# Module-scoped state
+# ---------------------------------------------------------------------------
+
+$script:__LogAnalyzerLogPath = $null
+$script:ErrorCodeDB          = @{}
+
+# ---------------------------------------------------------------------------
+# Known MECM log files and their categories
+# ---------------------------------------------------------------------------
+
+$script:KnownLogs = [ordered]@{
+    # App Deployment (c:\windows\ccm\logs\)
+    'AppEnforce'              = @{ Path = 'CCM\Logs'; Category = 'AppDeployment';    Description = 'Install/uninstall execution results' }
+    'AppDiscovery'            = @{ Path = 'CCM\Logs'; Category = 'AppDeployment';    Description = 'Detection method evaluation' }
+    'CAS'                     = @{ Path = 'CCM\Logs'; Category = 'AppDeployment';    Description = 'Content access and download' }
+    'ContentTransferManager'  = @{ Path = 'CCM\Logs'; Category = 'AppDeployment';    Description = 'BITS/content transfer operations' }
+    'LocationServices'        = @{ Path = 'CCM\Logs'; Category = 'AppDeployment';    Description = 'DP and boundary resolution' }
+
+    # Software Updates (c:\windows\ccm\logs\)
+    'WUAHandler'              = @{ Path = 'CCM\Logs'; Category = 'SoftwareUpdates';  Description = 'Update scan and compliance' }
+    'UpdatesDeployment'       = @{ Path = 'CCM\Logs'; Category = 'SoftwareUpdates';  Description = 'Update enforcement and installation' }
+    'UpdatesHandler'          = @{ Path = 'CCM\Logs'; Category = 'SoftwareUpdates';  Description = 'Update applicability evaluation' }
+    'UpdatesStore'            = @{ Path = 'CCM\Logs'; Category = 'SoftwareUpdates';  Description = 'Update scan result caching' }
+
+    # Client Infrastructure (c:\windows\ccm\logs\)
+    'PolicyAgent'             = @{ Path = 'CCM\Logs'; Category = 'ClientInfra';      Description = 'Policy retrieval and evaluation' }
+    'ClientLocation'          = @{ Path = 'CCM\Logs'; Category = 'ClientInfra';      Description = 'Site assignment and MP/DP resolution' }
+
+    # CCM Client Installation (c:\windows\ccmsetup\logs\)
+    'ccmsetup'                         = @{ Path = 'ccmsetup\Logs'; Category = 'ClientInstall'; Description = 'Client install/upgrade orchestration' }
+    'client.msi'                       = @{ Path = 'ccmsetup\Logs'; Category = 'ClientInstall'; Description = 'MSI install result (source of truth for 3010)' }
+    'MicrosoftPolicyPlatformSetup.msi' = @{ Path = 'ccmsetup\Logs'; Category = 'ClientInstall'; Description = 'MPP prerequisite install' }
+}
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+function Initialize-Logging {
+    param([string]$LogPath)
+
+    $script:__LogAnalyzerLogPath = $LogPath
+
+    if ($LogPath) {
+        $parentDir = Split-Path -Path $LogPath -Parent
+        if ($parentDir -and -not (Test-Path -LiteralPath $parentDir)) {
+            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+        }
+
+        $header = "[{0}] [INFO ] === Log initialized ===" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        Set-Content -LiteralPath $LogPath -Value $header -Encoding UTF8
+    }
+}
+
+function Write-Log {
+    <#
+    .SYNOPSIS
+        Writes a timestamped, severity-tagged log message.
+
+    .DESCRIPTION
+        INFO  -> Write-Host (stdout)
+        WARN  -> Write-Host (stdout)
+        ERROR -> Write-Host (stdout) + $host.UI.WriteErrorLine (stderr)
+
+        -Quiet suppresses all console output but still writes to the log file.
+    #>
+    param(
+        [AllowEmptyString()]
+        [Parameter(Mandatory, Position = 0)]
+        [string]$Message,
+
+        [ValidateSet('INFO', 'WARN', 'ERROR')]
+        [string]$Level = 'INFO',
+
+        [switch]$Quiet
+    )
+
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $formatted = "[{0}] [{1,-5}] {2}" -f $timestamp, $Level, $Message
+
+    if (-not $Quiet) {
+        Write-Host $formatted
+
+        if ($Level -eq 'ERROR') {
+            $host.UI.WriteErrorLine($formatted)
+        }
+    }
+
+    if ($script:__LogAnalyzerLogPath) {
+        Add-Content -LiteralPath $script:__LogAnalyzerLogPath -Value $formatted -Encoding UTF8 -ErrorAction SilentlyContinue
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Device Resolution
+# ---------------------------------------------------------------------------
+
+function Resolve-DeviceList {
+    <#
+    .SYNOPSIS
+        Resolves input to a list of device hostnames.
+
+    .DESCRIPTION
+        Accepts a single hostname, comma-separated list, newline-separated list,
+        or a ConfigMgr collection name (-IsCollection). Returns [string[]] of
+        unique hostnames, sorted alphabetically.
+
+        The -IsCollection switch is the ONLY code path that requires the
+        ConfigurationManager PowerShell module.
+
+    .EXAMPLE
+        Resolve-DeviceList -InputText "SERVER01, SERVER02, SERVER03"
+        Resolve-DeviceList -InputText "Workstations - Pilot" -IsCollection -SiteCode "MCM"
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$InputText,
+
+        [string]$SiteCode,
+
+        [switch]$IsCollection
+    )
+
+    if ($IsCollection) {
+        Write-Log "Resolving collection members for: $InputText"
+
+        if (-not $SiteCode) {
+            throw "SiteCode is required when using -IsCollection."
+        }
+
+        try {
+            if (-not (Get-Module ConfigurationManager -ErrorAction SilentlyContinue)) {
+                $cmModule = Join-Path $env:SMS_ADMIN_UI_PATH '..\ConfigurationManager.psd1'
+                if (Test-Path $cmModule) {
+                    Import-Module $cmModule -ErrorAction Stop
+                } else {
+                    throw "ConfigurationManager module not found at expected path."
+                }
+            }
+
+            $originalLocation = Get-Location
+            Set-Location "${SiteCode}:" -ErrorAction Stop
+
+            $members = Get-CMCollectionMember -CollectionName $InputText -ErrorAction Stop |
+                Select-Object -ExpandProperty Name
+
+            Set-Location $originalLocation
+
+            if (-not $members -or $members.Count -eq 0) {
+                Write-Log "No members found in collection: $InputText" -Level WARN
+                return @()
+            }
+
+            $sorted = $members | Sort-Object -Unique
+            Write-Log "Resolved $($sorted.Count) devices from collection: $InputText"
+            return $sorted
+        }
+        catch {
+            if ($originalLocation) {
+                Set-Location $originalLocation -ErrorAction SilentlyContinue
+            }
+            throw "Failed to resolve collection '$InputText': $($_.Exception.Message)"
+        }
+    }
+
+    # Split on comma, semicolon, or newline; trim whitespace; remove empty
+    $devices = $InputText -split '[,;\r\n]+' |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -ne '' } |
+        Sort-Object -Unique
+
+    if ($devices.Count -eq 0) {
+        Write-Log "No hostnames found in input text." -Level WARN
+        return @()
+    }
+
+    Write-Log "Resolved $($devices.Count) device(s) from input text."
+    return $devices
+}
+
+# ---------------------------------------------------------------------------
+# Log Retrieval
+# ---------------------------------------------------------------------------
+
+function Test-AdminShareAccess {
+    <#
+    .SYNOPSIS
+        Tests whether ADMIN$ share is accessible on a remote device.
+
+    .OUTPUTS
+        [pscustomobject] with Hostname, Accessible, ErrorMessage
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    $ccmPath   = "\\$Hostname\C`$\Windows\CCM\Logs"
+    $setupPath = "\\$Hostname\C`$\Windows\ccmsetup\Logs"
+
+    $result = [pscustomobject]@{
+        Hostname     = $Hostname
+        Accessible   = $false
+        CcmLogs      = $false
+        SetupLogs    = $false
+        ErrorMessage = $null
+    }
+
+    try {
+        $result.CcmLogs   = Test-Path -LiteralPath $ccmPath -ErrorAction Stop
+        $result.SetupLogs = Test-Path -LiteralPath $setupPath -ErrorAction Stop
+        $result.Accessible = $result.CcmLogs -or $result.SetupLogs
+
+        if (-not $result.Accessible) {
+            $result.ErrorMessage = "Neither CCM\Logs nor ccmsetup\Logs found on $Hostname"
+        }
+    }
+    catch {
+        $result.ErrorMessage = $_.Exception.Message
+    }
+
+    return $result
+}
+
+function Test-PSRemoteAccess {
+    <#
+    .SYNOPSIS
+        Tests whether PSRemoting is reachable on a remote device.
+
+    .OUTPUTS
+        [pscustomobject] with Hostname, Accessible, CcmLogs, SetupLogs, ErrorMessage
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    $result = [pscustomobject]@{
+        Hostname     = $Hostname
+        Accessible   = $false
+        CcmLogs      = $false
+        SetupLogs    = $false
+        ErrorMessage = $null
+    }
+
+    try {
+        $session = New-PSSession -ComputerName $Hostname -ErrorAction Stop
+
+        $pathCheck = Invoke-Command -Session $session -ScriptBlock {
+            @{
+                CcmLogs   = Test-Path 'C:\Windows\CCM\Logs'
+                SetupLogs = Test-Path 'C:\Windows\ccmsetup\Logs'
+            }
+        } -ErrorAction Stop
+
+        $result.CcmLogs   = $pathCheck.CcmLogs
+        $result.SetupLogs = $pathCheck.SetupLogs
+        $result.Accessible = $result.CcmLogs -or $result.SetupLogs
+
+        if (-not $result.Accessible) {
+            $result.ErrorMessage = "Neither CCM\Logs nor ccmsetup\Logs found on $Hostname"
+        }
+
+        Remove-PSSession -Session $session
+    }
+    catch {
+        $result.ErrorMessage = $_.Exception.Message
+    }
+
+    return $result
+}
+
+function Get-RemoteLogFiles {
+    <#
+    .SYNOPSIS
+        Enumerates available log files on a remote device via ADMIN$ share.
+
+    .OUTPUTS
+        [pscustomobject[]] with Name, UNCPath, SizeKB, LastModified, Category
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname,
+
+        [string[]]$LogNames,
+
+        [string[]]$Categories
+    )
+
+    $results = @()
+    $windowsRoot = "\\$Hostname\C`$\Windows"
+
+    foreach ($logName in $script:KnownLogs.Keys) {
+        $meta = $script:KnownLogs[$logName]
+
+        # Filter by log names if specified
+        if ($LogNames -and $logName -notin $LogNames) { continue }
+
+        # Filter by category if specified
+        if ($Categories -and $meta.Category -notin $Categories) { continue }
+
+        $logDir  = Join-Path $windowsRoot $meta.Path
+        $logFile = Join-Path $logDir "$logName.log"
+
+        if (Test-Path -LiteralPath $logFile -ErrorAction SilentlyContinue) {
+            $fi = Get-Item -LiteralPath $logFile -ErrorAction SilentlyContinue
+            if ($fi) {
+                $results += [pscustomobject]@{
+                    Name         = $logName
+                    FileName     = "$logName.log"
+                    UNCPath      = $logFile
+                    SizeKB       = [math]::Round($fi.Length / 1KB, 1)
+                    LastModified = $fi.LastWriteTime
+                    Category     = $meta.Category
+                    Description  = $meta.Description
+                }
+            }
+        }
+    }
+
+    return $results
+}
+
+function Copy-RemoteLogFiles {
+    <#
+    .SYNOPSIS
+        Copies log files from remote device to local staging directory.
+
+    .DESCRIPTION
+        Creates a per-device subfolder under LocalStagingRoot and copies
+        matching log files from the ADMIN$ share.
+
+    .OUTPUTS
+        [pscustomobject[]] with LogName, LocalPath, SourceUNC, CopySuccess, Error
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname,
+
+        [Parameter(Mandatory)]
+        [string]$LocalStagingRoot,
+
+        [string[]]$LogNames,
+
+        [string[]]$Categories,
+
+        [switch]$IncludeRotated
+    )
+
+    $deviceFolder = Join-Path $LocalStagingRoot $Hostname
+    if (-not (Test-Path -LiteralPath $deviceFolder)) {
+        New-Item -ItemType Directory -Path $deviceFolder -Force | Out-Null
+    }
+
+    $remoteLogs = Get-RemoteLogFiles -Hostname $Hostname -LogNames $LogNames -Categories $Categories
+    $results = @()
+
+    foreach ($log in $remoteLogs) {
+        $destPath = Join-Path $deviceFolder $log.FileName
+        $entry = [pscustomobject]@{
+            LogName     = $log.Name
+            LocalPath   = $destPath
+            SourceUNC   = $log.UNCPath
+            CopySuccess = $false
+            Error       = $null
+            Category    = $log.Category
+        }
+
+        try {
+            Copy-Item -LiteralPath $log.UNCPath -Destination $destPath -Force -ErrorAction Stop
+            $entry.CopySuccess = $true
+
+            # Copy rotated logs (.lo_) if requested
+            if ($IncludeRotated) {
+                $rotatedPattern = Join-Path (Split-Path $log.UNCPath -Parent) "$($log.Name).lo_"
+                if (Test-Path -LiteralPath $rotatedPattern -ErrorAction SilentlyContinue) {
+                    $rotatedDest = Join-Path $deviceFolder "$($log.Name).lo_"
+                    Copy-Item -LiteralPath $rotatedPattern -Destination $rotatedDest -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        catch {
+            $entry.Error = $_.Exception.Message
+        }
+
+        $results += $entry
+    }
+
+    return $results
+}
+
+function Copy-RemoteLogFilesPSRemote {
+    <#
+    .SYNOPSIS
+        Copies log files from remote device to local staging via PSRemoting.
+
+    .DESCRIPTION
+        Uses New-PSSession + Invoke-Command to read file bytes on the remote
+        device and write them locally. No ADMIN$/C$ share access needed.
+
+    .OUTPUTS
+        [pscustomobject[]] with LogName, LocalPath, SourceUNC, CopySuccess, Error, Category
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname,
+
+        [Parameter(Mandatory)]
+        [string]$LocalStagingRoot,
+
+        [string[]]$LogNames,
+
+        [string[]]$Categories,
+
+        [switch]$IncludeRotated
+    )
+
+    $deviceFolder = Join-Path $LocalStagingRoot $Hostname
+    if (-not (Test-Path -LiteralPath $deviceFolder)) {
+        New-Item -ItemType Directory -Path $deviceFolder -Force | Out-Null
+    }
+
+    $results = @()
+
+    try {
+        $session = New-PSSession -ComputerName $Hostname -ErrorAction Stop
+    }
+    catch {
+        Write-Log "PSRemote session failed for ${Hostname}: $($_.Exception.Message)" -Level ERROR
+        return $results
+    }
+
+    try {
+        foreach ($logName in $script:KnownLogs.Keys) {
+            $meta = $script:KnownLogs[$logName]
+
+            if ($LogNames -and $logName -notin $LogNames) { continue }
+            if ($Categories -and $meta.Category -notin $Categories) { continue }
+
+            $remotePath = "C:\Windows\$($meta.Path)\$logName.log"
+
+            $entry = [pscustomobject]@{
+                LogName     = $logName
+                LocalPath   = (Join-Path $deviceFolder "$logName.log")
+                SourceUNC   = "\\$Hostname\C`$\Windows\$($meta.Path)\$logName.log"
+                CopySuccess = $false
+                Error       = $null
+                Category    = $meta.Category
+            }
+
+            try {
+                $fileBytes = Invoke-Command -Session $session -ScriptBlock {
+                    param($p)
+                    if (Test-Path -LiteralPath $p) {
+                        [System.IO.File]::ReadAllBytes($p)
+                    } else {
+                        $null
+                    }
+                } -ArgumentList $remotePath -ErrorAction Stop
+
+                if ($null -ne $fileBytes) {
+                    [System.IO.File]::WriteAllBytes($entry.LocalPath, $fileBytes)
+                    $entry.CopySuccess = $true
+                }
+
+                # Copy rotated logs if requested
+                if ($IncludeRotated -and $entry.CopySuccess) {
+                    $rotatedRemote = "C:\Windows\$($meta.Path)\$logName.lo_"
+                    $rotatedBytes = Invoke-Command -Session $session -ScriptBlock {
+                        param($p)
+                        if (Test-Path -LiteralPath $p) {
+                            [System.IO.File]::ReadAllBytes($p)
+                        } else {
+                            $null
+                        }
+                    } -ArgumentList $rotatedRemote -ErrorAction SilentlyContinue
+
+                    if ($null -ne $rotatedBytes) {
+                        $rotatedDest = Join-Path $deviceFolder "$logName.lo_"
+                        [System.IO.File]::WriteAllBytes($rotatedDest, $rotatedBytes)
+                    }
+                }
+            }
+            catch {
+                $entry.Error = $_.Exception.Message
+            }
+
+            if ($entry.CopySuccess -or $entry.Error) {
+                $results += $entry
+            }
+        }
+    }
+    finally {
+        Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+    }
+
+    return $results
+}
+
+function Save-EvidenceCopy {
+    <#
+    .SYNOPSIS
+        Copies staged log files to an evidence folder for documentation.
+
+    .DESCRIPTION
+        Creates "hostname - YYMMDD - userid" subfolder under EvidenceRoot
+        and copies all files from the local staging folder into it.
+
+    .OUTPUTS
+        [pscustomobject] with EvidencePath, FilesCopied, Error
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname,
+
+        [Parameter(Mandatory)]
+        [string]$StagingFolder,
+
+        [Parameter(Mandatory)]
+        [string]$EvidenceRoot
+    )
+
+    $dateStamp = (Get-Date).ToString('yyMMdd')
+    $userId    = $env:USERNAME
+    $folderName = "$Hostname - $dateStamp - $userId"
+    $evidencePath = Join-Path $EvidenceRoot $folderName
+
+    $result = [pscustomobject]@{
+        EvidencePath = $evidencePath
+        FilesCopied  = 0
+        Error        = $null
+    }
+
+    try {
+        if (-not (Test-Path -LiteralPath $evidencePath)) {
+            New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
+        }
+
+        $files = Get-ChildItem -LiteralPath $StagingFolder -File -ErrorAction Stop
+        foreach ($file in $files) {
+            Copy-Item -LiteralPath $file.FullName -Destination $evidencePath -Force -ErrorAction Stop
+            $result.FilesCopied++
+        }
+    }
+    catch {
+        $result.Error = $_.Exception.Message
+    }
+
+    return $result
+}
+
+# ---------------------------------------------------------------------------
+# CMTrace Log Parsing
+# ---------------------------------------------------------------------------
+
+function Read-LATLogFileShared {
+    <#
+    .SYNOPSIS
+        Reads a log file whole with FileShare.ReadWrite semantics.
+
+    .DESCRIPTION
+        Internal helper. Replaces [System.IO.File]::ReadAllText (which
+        opens with FileShare.Read) so LAT can read live MECM client logs
+        while the SMS Agent Host process still holds them open for
+        write. CMTrace itself reads with FileShare.ReadWrite for the
+        same reason -- without this, reading \\client\c$\Windows\CCM\Logs
+        while the agent is active raises "used by another process".
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    $fs = $null; $sr = $null
+    try {
+        $fs = [System.IO.FileStream]::new(
+            $Path,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read,
+            [System.IO.FileShare]::ReadWrite
+        )
+        $sr = [System.IO.StreamReader]::new($fs)
+        return $sr.ReadToEnd()
+    } finally {
+        if ($sr) { $sr.Dispose() }
+        if ($fs) { $fs.Dispose() }
+    }
+}
+
+function ConvertFrom-CMTraceLog {
+    <#
+    .SYNOPSIS
+        Parses a CMTrace-format log file into structured objects.
+
+    .DESCRIPTION
+        Reads a log file and returns an array of structured log entry objects.
+        Supports both XML-style CMTrace format and legacy CMTrace format.
+        Handles multi-line messages (continuation lines without LOG markers).
+
+        Uses Read-LATLogFileShared + [regex]::Matches() for performance on
+        large log files (AppEnforce.log can be 1MB+). The shared-read
+        wrapper lets LAT triage live client logs the SMS Agent Host still
+        holds open for write.
+
+    .EXAMPLE
+        $entries = ConvertFrom-CMTraceLog -Path "C:\temp\AppEnforce.log"
+        $entries | Where-Object { $_.Type -eq 3 } | Format-Table DateTime, Component, Message
+
+    .EXAMPLE
+        $entries = ConvertFrom-CMTraceLog -Path $path -After (Get-Date).AddHours(-24) -TypeFilter 2,3
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [datetime]$After,
+
+        [datetime]$Before,
+
+        [int[]]$TypeFilter,
+
+        [string]$MessageFilter
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Log "Log file not found: $Path" -Level WARN
+        return @()
+    }
+
+    $logFileName = Split-Path $Path -Leaf
+
+    try {
+        $rawContent = Read-LATLogFileShared -Path $Path
+    }
+    catch {
+        Write-Log "Failed to read log file $Path - $($_.Exception.Message)" -Level ERROR
+        return @()
+    }
+
+    if ([string]::IsNullOrWhiteSpace($rawContent)) {
+        Write-Log "Log file is empty: $Path" -Level WARN
+        return @()
+    }
+
+    # CMTrace XML-style pattern
+    $cmtracePattern = '<!\[LOG\[(?<Message>.*?)\]LOG\]!>' +
+        '<time="(?<Time>[^"]+)"\s+' +
+        'date="(?<Date>[^"]+)"\s+' +
+        'component="(?<Component>[^"]*?)"\s+' +
+        'context="(?<Context>[^"]*?)"\s+' +
+        'type="(?<Type>\d)"\s+' +
+        'thread="(?<Thread>[^"]*?)"\s+' +
+        'file="(?<File>[^"]*?)">'
+
+    # Legacy pattern: message $$<component><date time+/-tz><thread=tid>
+    $legacyPattern = '(?<Message>.+?)\s+\$\$<(?<Component>[^>]+)>' +
+        '<(?<Date>\d{1,2}-\d{1,2}-\d{4})\s+(?<Time>\d{1,2}:\d{2}:\d{2}\.\d+)' +
+        '(?<TZSign>[+-])(?<TZOffset>\d+)>' +
+        '<thread=(?<Thread>\d+)(?:\s+\([^)]*\))?>'
+
+    $severityMap = @{ 1 = 'Info'; 2 = 'Warning'; 3 = 'Error' }
+    $results = [System.Collections.ArrayList]::new()
+
+    # Try CMTrace pattern first
+    $matches = [regex]::Matches($rawContent, $cmtracePattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+
+    if ($matches.Count -gt 0) {
+        $lineNumber = 0
+        foreach ($m in $matches) {
+            $lineNumber++
+
+            $msg       = $m.Groups['Message'].Value
+            $timeStr   = $m.Groups['Time'].Value
+            $dateStr   = $m.Groups['Date'].Value
+            $component = $m.Groups['Component'].Value
+            $context   = $m.Groups['Context'].Value
+            $typeInt   = [int]$m.Groups['Type'].Value
+            $thread    = $m.Groups['Thread'].Value
+            $file      = $m.Groups['File'].Value
+
+            # Parse datetime - time format is "HH:mm:ss.ffffff+/-TZOffset"
+            $cleanTime = $timeStr -replace '[+-]\d+$', ''
+            $dtString  = "$dateStr $cleanTime"
+
+            $parsedDT = $null
+            $formats  = @('M-d-yyyy HH:mm:ss.ffffff', 'M-d-yyyy HH:mm:ss.fff', 'M-d-yyyy HH:mm:ss')
+            foreach ($fmt in $formats) {
+                $tempDT = [datetime]::MinValue
+                if ([datetime]::TryParseExact($dtString, $fmt, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$tempDT)) {
+                    $parsedDT = $tempDT
+                    break
+                }
+            }
+
+            if ($null -eq $parsedDT) {
+                # Last resort - try generic parse
+                try { $parsedDT = [datetime]::Parse("$dateStr $cleanTime") }
+                catch { $parsedDT = [datetime]::MinValue }
+            }
+
+            # Apply filters
+            if ($After -and $parsedDT -lt $After) { continue }
+            if ($Before -and $parsedDT -gt $Before) { continue }
+            if ($TypeFilter -and $typeInt -notin $TypeFilter) { continue }
+            if ($MessageFilter -and $msg -notmatch $MessageFilter) { continue }
+
+            $severity = if ($severityMap.ContainsKey($typeInt)) { $severityMap[$typeInt] } else { 'Unknown' }
+
+            [void]$results.Add([pscustomobject]@{
+                Message    = $msg
+                DateTime   = $parsedDT
+                Component  = $component
+                Context    = $context
+                Type       = $typeInt
+                Severity   = $severity
+                Thread     = $thread
+                File       = $file
+                LineNumber = $lineNumber
+                LogFile    = $logFileName
+            })
+        }
+    }
+    else {
+        # Try legacy pattern
+        $legacyMatches = [regex]::Matches($rawContent, $legacyPattern, [System.Text.RegularExpressions.RegexOptions]::Multiline)
+
+        if ($legacyMatches.Count -gt 0) {
+            $lineNumber = 0
+            foreach ($m in $legacyMatches) {
+                $lineNumber++
+
+                $msg       = $m.Groups['Message'].Value.Trim()
+                $dateStr   = $m.Groups['Date'].Value
+                $timeStr   = $m.Groups['Time'].Value
+                $component = $m.Groups['Component'].Value
+                $thread    = $m.Groups['Thread'].Value
+
+                $cleanTime = $timeStr -replace '\.\d+$', ''
+                $parsedDT  = $null
+                try { $parsedDT = [datetime]::Parse("$dateStr $cleanTime") }
+                catch { $parsedDT = [datetime]::MinValue }
+
+                # Legacy format has no explicit type - infer from message content
+                $typeInt = 1
+                if ($msg -match '(?i)(error|fail|exception|0x8)') { $typeInt = 3 }
+                elseif ($msg -match '(?i)(warn|caution)') { $typeInt = 2 }
+
+                if ($After -and $parsedDT -lt $After) { continue }
+                if ($Before -and $parsedDT -gt $Before) { continue }
+                if ($TypeFilter -and $typeInt -notin $TypeFilter) { continue }
+                if ($MessageFilter -and $msg -notmatch $MessageFilter) { continue }
+
+                $severity = if ($severityMap.ContainsKey($typeInt)) { $severityMap[$typeInt] } else { 'Unknown' }
+
+                [void]$results.Add([pscustomobject]@{
+                    Message    = $msg
+                    DateTime   = $parsedDT
+                    Component  = $component
+                    Context    = ''
+                    Type       = $typeInt
+                    Severity   = $severity
+                    Thread     = $thread
+                    File       = ''
+                    LineNumber = $lineNumber
+                    LogFile    = $logFileName
+                })
+            }
+        }
+        else {
+            Write-Log "No CMTrace or legacy entries matched in: $logFileName" -Level WARN
+        }
+    }
+
+    Write-Log "Parsed $($results.Count) entries from $logFileName"
+    return $results.ToArray()
+}
+
+# ---------------------------------------------------------------------------
+# Error Code Translation
+# ---------------------------------------------------------------------------
+
+function Import-ErrorCodeDatabase {
+    <#
+    .SYNOPSIS
+        Loads all error code JSON files into a unified lookup hashtable.
+
+    .DESCRIPTION
+        Reads all JSON files from the ErrorCodes folder and merges into
+        $script:ErrorCodeDB keyed by both hex and decimal representations.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$ErrorCodesRoot
+    )
+
+    $script:ErrorCodeDB = @{}
+
+    if (-not (Test-Path -LiteralPath $ErrorCodesRoot)) {
+        Write-Log "ErrorCodes folder not found: $ErrorCodesRoot" -Level WARN
+        return
+    }
+
+    $jsonFiles = Get-ChildItem -Path $ErrorCodesRoot -Filter '*.json' -ErrorAction SilentlyContinue
+    $totalCodes = 0
+
+    foreach ($jsonFile in $jsonFiles) {
+        try {
+            $entries = Get-Content -LiteralPath $jsonFile.FullName -Raw -ErrorAction Stop |
+                ConvertFrom-Json -ErrorAction Stop
+
+            foreach ($entry in $entries) {
+                $obj = [pscustomobject]@{
+                    Code       = $entry.Code
+                    Decimal    = $entry.Decimal
+                    Source     = $entry.Source
+                    Message    = $entry.Message
+                    Resolution = $entry.Resolution
+                    LogsToCheck = $entry.LogsToCheck
+                }
+
+                # Index by hex code
+                if ($entry.Code) {
+                    $script:ErrorCodeDB[$entry.Code.ToUpper()] = $obj
+                }
+
+                # Index by decimal
+                if ($entry.Decimal) {
+                    $script:ErrorCodeDB[$entry.Decimal] = $obj
+                }
+
+                $totalCodes++
+            }
+        }
+        catch {
+            Write-Log "Failed to load error codes from $($jsonFile.Name): $($_.Exception.Message)" -Level WARN
+        }
+    }
+
+    Write-Log "Loaded $totalCodes error codes from $($jsonFiles.Count) file(s)."
+}
+
+function Resolve-ErrorCode {
+    <#
+    .SYNOPSIS
+        Translates an error code to a human-readable description.
+
+    .DESCRIPTION
+        Accepts decimal, hex (0x...), or negative-decimal MECM codes.
+        Normalizes to all known representations and looks up in database.
+        Falls back to Win32 error code lookup via [System.ComponentModel.Win32Exception].
+
+    .OUTPUTS
+        [pscustomobject] with Code, HexCode, Source, Message, Resolution, LogsToCheck, Found
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$ErrorCode
+    )
+
+    $code = $ErrorCode.Trim()
+    $hexCode    = $null
+    $decCode    = $null
+
+    # Normalize representations
+    if ($code -match '^0x[0-9A-Fa-f]+$') {
+        $hexCode = $code.ToUpper()
+        try {
+            $decCode = [string][int64]("$code")
+        } catch {}
+    }
+    elseif ($code -match '^-?\d+$') {
+        $decCode = $code
+        try {
+            if ([long]$code -lt 0) {
+                $hexCode = '0x' + ([uint32]([int]$code)).ToString('X8')
+            } else {
+                $hexCode = '0x' + ([int64]$code).ToString('X')
+            }
+        } catch {}
+    }
+
+    # Look up in database
+    $found = $null
+    if ($hexCode -and $script:ErrorCodeDB.ContainsKey($hexCode)) {
+        $found = $script:ErrorCodeDB[$hexCode]
+    }
+    elseif ($decCode -and $script:ErrorCodeDB.ContainsKey($decCode)) {
+        $found = $script:ErrorCodeDB[$decCode]
+    }
+
+    if ($found) {
+        return [pscustomobject]@{
+            Code        = $code
+            HexCode     = if ($hexCode) { $hexCode } else { $found.Code }
+            Source      = $found.Source
+            Message     = $found.Message
+            Resolution  = $found.Resolution
+            LogsToCheck = $found.LogsToCheck
+            Found       = $true
+        }
+    }
+
+    # Fallback: Win32 exception
+    $win32Msg = $null
+    try {
+        $intCode = [int]$code
+        $win32Msg = ([System.ComponentModel.Win32Exception]::new($intCode)).Message
+    } catch {}
+
+    return [pscustomobject]@{
+        Code        = $code
+        HexCode     = $hexCode
+        Source      = if ($win32Msg) { 'Win32' } else { 'Unknown' }
+        Message     = if ($win32Msg) { $win32Msg } else { "Unknown error code: $code" }
+        Resolution  = $null
+        LogsToCheck = $null
+        Found       = [bool]$win32Msg
+    }
+}
+
+function Find-LogErrors {
+    <#
+    .SYNOPSIS
+        Scans parsed log entries for errors, warnings, and known error code patterns.
+
+    .DESCRIPTION
+        Takes an array of parsed log entries (from ConvertFrom-CMTraceLog) and:
+        1. Filters to Type 2 (Warning) and Type 3 (Error)
+        2. Extracts error codes from message text via regex
+        3. Resolves each error code via Resolve-ErrorCode
+        4. Returns enriched error objects with translations
+
+    .OUTPUTS
+        [pscustomobject[]] with original log entry properties PLUS ErrorCode, ErrorTranslation
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject[]]$LogEntries,
+
+        [switch]$ErrorsOnly,
+
+        [switch]$IncludeInfo
+    )
+
+    # Error code extraction patterns
+    $hexPattern    = '(0x[0-9A-Fa-f]{4,8})'
+    $decPattern    = '(?:error\s*(?:code)?|exit\s*code|return\s*(?:value|code))\s*[=:]\s*(-?\d{2,10})'
+    $msiPattern    = 'return value\s+(\d+)'
+
+    $results = [System.Collections.ArrayList]::new()
+
+    foreach ($entry in $LogEntries) {
+        # Filter by severity
+        if ($ErrorsOnly -and $entry.Type -ne 3) { continue }
+        if (-not $IncludeInfo -and $entry.Type -eq 1) {
+            # For Info entries, only include if they contain an error code
+            $hasCode = $entry.Message -match $hexPattern -or
+                       $entry.Message -match $decPattern -or
+                       $entry.Message -match $msiPattern
+            if (-not $hasCode) { continue }
+        }
+
+        # Extract error codes from message
+        $errorCodes = @()
+
+        $hexMatches = [regex]::Matches($entry.Message, $hexPattern)
+        foreach ($hm in $hexMatches) {
+            $errorCodes += $hm.Groups[1].Value
+        }
+
+        $decMatches = [regex]::Matches($entry.Message, $decPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($dm in $decMatches) {
+            $errorCodes += $dm.Groups[1].Value
+        }
+
+        $msiMatches = [regex]::Matches($entry.Message, $msiPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($mm in $msiMatches) {
+            $val = $mm.Groups[1].Value
+            # Only include non-zero MSI return values as "errors"
+            if ($val -ne '0') {
+                $errorCodes += $val
+            }
+        }
+
+        $errorCodes = $errorCodes | Select-Object -Unique
+
+        # Resolve each error code
+        $translations = @()
+        foreach ($ec in $errorCodes) {
+            $translations += Resolve-ErrorCode -ErrorCode $ec
+        }
+
+        $primaryCode = if ($errorCodes.Count -gt 0) { $errorCodes[0] } else { $null }
+        $primaryTranslation = if ($translations.Count -gt 0) { $translations[0] } else { $null }
+
+        [void]$results.Add([pscustomobject]@{
+            Message          = $entry.Message
+            DateTime         = $entry.DateTime
+            Component        = $entry.Component
+            Context          = $entry.Context
+            Type             = $entry.Type
+            Severity         = $entry.Severity
+            Thread           = $entry.Thread
+            LogFile          = $entry.LogFile
+            LineNumber       = $entry.LineNumber
+            ErrorCode        = $primaryCode
+            ErrorTranslation = $primaryTranslation
+            AllErrorCodes    = $errorCodes
+            AllTranslations  = $translations
+        })
+    }
+
+    return $results.ToArray()
+}
+
+# ---------------------------------------------------------------------------
+# Duplicate Collapse
+# ---------------------------------------------------------------------------
+
+function Compress-LogEntries {
+    <#
+    .SYNOPSIS
+        Collapses consecutive duplicate log entries into single entries with repeat counts.
+
+    .DESCRIPTION
+        Groups consecutive runs of entries that share the same normalized message template,
+        component, and severity. Each group becomes a single entry with RepeatCount and
+        RepeatSpan properties. Reduces noise by 80-95% in typical MECM logs.
+
+        Message normalization strips GUIDs, IP addresses, hex addresses, UNC paths,
+        local paths, and standalone numbers so that entries differing only in those
+        values are treated as duplicates.
+
+    .EXAMPLE
+        $collapsed = Compress-LogEntries -Entries $enrichedEntries
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$Entries,
+
+        [int]$MinRepeatCount = 2
+    )
+
+    if ($Entries.Count -eq 0) { return $Entries }
+    if ($Entries.Count -eq 1) {
+        $e = $Entries[0]
+        return @([pscustomobject]@{
+            Message          = $e.Message
+            DateTime         = $e.DateTime
+            Component        = $e.Component
+            Context          = $e.Context
+            Type             = $e.Type
+            Severity         = $e.Severity
+            Thread           = $e.Thread
+            LogFile          = $e.LogFile
+            LineNumber       = $e.LineNumber
+            ErrorCode        = $e.ErrorCode
+            ErrorTranslation = $e.ErrorTranslation
+            AllErrorCodes    = $e.AllErrorCodes
+            AllTranslations  = $e.AllTranslations
+            RepeatCount      = 1
+            RepeatSpan       = $null
+        })
+    }
+
+    # Normalize a message to a template for grouping
+    $normalizeMessage = {
+        param([string]$msg)
+        $t = $msg
+        # GUIDs: {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx} or bare
+        $t = [regex]::Replace($t, '\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}?', '<GUID>')
+        # IP addresses
+        $t = [regex]::Replace($t, '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '<IP>')
+        # Hex values (0x...)
+        $t = [regex]::Replace($t, '0x[0-9A-Fa-f]{4,}', '<HEX>')
+        # UNC paths
+        $t = [regex]::Replace($t, '\\\\[^\s"'']+', '<PATH>')
+        # Local paths (C:\...)
+        $t = [regex]::Replace($t, '[A-Za-z]:\\[^\s"'']+', '<PATH>')
+        # Standalone numbers (not inside words)
+        $t = [regex]::Replace($t, '(?<![A-Za-z])\d{2,}(?![A-Za-z])', '<N>')
+        return $t
+    }
+
+    $results = [System.Collections.ArrayList]::new()
+    $groupStart = 0
+
+    # Pre-compute templates
+    $templates = [string[]]::new($Entries.Count)
+    for ($i = 0; $i -lt $Entries.Count; $i++) {
+        $templates[$i] = & $normalizeMessage $Entries[$i].Message
+    }
+
+    for ($i = 1; $i -le $Entries.Count; $i++) {
+        $sameGroup = $false
+        if ($i -lt $Entries.Count) {
+            $sameGroup = ($templates[$i] -eq $templates[$groupStart]) -and
+                         ($Entries[$i].Component -eq $Entries[$groupStart].Component) -and
+                         ($Entries[$i].Severity -eq $Entries[$groupStart].Severity)
+        }
+
+        if (-not $sameGroup) {
+            $groupCount = $i - $groupStart
+            $first = $Entries[$groupStart]
+
+            if ($groupCount -ge $MinRepeatCount) {
+                $last = $Entries[$i - 1]
+                $spanStart = $first.DateTime.ToString('HH:mm:ss')
+                $spanEnd   = $last.DateTime.ToString('HH:mm:ss')
+                $span = if ($spanStart -eq $spanEnd) { $spanStart } else { "$spanStart - $spanEnd" }
+
+                # Build collapsed entry preserving all original properties from the first occurrence
+                [void]$results.Add([pscustomobject]@{
+                    Message          = $first.Message
+                    DateTime         = $first.DateTime
+                    Component        = $first.Component
+                    Context          = $first.Context
+                    Type             = $first.Type
+                    Severity         = $first.Severity
+                    Thread           = $first.Thread
+                    LogFile          = $first.LogFile
+                    LineNumber       = $first.LineNumber
+                    ErrorCode        = $first.ErrorCode
+                    ErrorTranslation = $first.ErrorTranslation
+                    AllErrorCodes    = $first.AllErrorCodes
+                    AllTranslations  = $first.AllTranslations
+                    RepeatCount      = $groupCount
+                    RepeatSpan       = $span
+                })
+            }
+            else {
+                # Single entry (or below threshold) - pass through with RepeatCount = 1
+                for ($j = $groupStart; $j -lt $i; $j++) {
+                    $e = $Entries[$j]
+                    [void]$results.Add([pscustomobject]@{
+                        Message          = $e.Message
+                        DateTime         = $e.DateTime
+                        Component        = $e.Component
+                        Context          = $e.Context
+                        Type             = $e.Type
+                        Severity         = $e.Severity
+                        Thread           = $e.Thread
+                        LogFile          = $e.LogFile
+                        LineNumber       = $e.LineNumber
+                        ErrorCode        = $e.ErrorCode
+                        ErrorTranslation = $e.ErrorTranslation
+                        AllErrorCodes    = $e.AllErrorCodes
+                        AllTranslations  = $e.AllTranslations
+                        RepeatCount      = 1
+                        RepeatSpan       = $null
+                    })
+                }
+            }
+
+            $groupStart = $i
+        }
+    }
+
+    return $results.ToArray()
+}
+
+# ---------------------------------------------------------------------------
+# Signature Detection
+# ---------------------------------------------------------------------------
+
+$script:SignatureDB = $null
+
+function Import-SignatureDatabase {
+    <#
+    .SYNOPSIS
+        Loads the log signature database from JSON.
+    #>
+    param(
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        $Path = Join-Path (Split-Path $PSScriptRoot -Parent) 'SignatureDB\log-signatures.json'
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Log "Signature database not found: $Path" -Level WARN -Quiet
+        $script:SignatureDB = @()
+        return
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $script:SignatureDB = @($raw)
+        Write-Log "Loaded $($script:SignatureDB.Count) log signatures" -Quiet
+    }
+    catch {
+        Write-Log "Failed to load signature database: $_" -Level ERROR -Quiet
+        $script:SignatureDB = @()
+    }
+}
+
+function Invoke-SignatureDetection {
+    <#
+    .SYNOPSIS
+        Pattern-matches log entries against a knowledge base of known-bad log patterns.
+
+    .DESCRIPTION
+        Scans each entry's message text against regex patterns in the signature database.
+        Matches are filtered by component when the signature specifies components (empty
+        components array means match any component). Adds SignatureId, SignatureName,
+        SignatureExplanation, and SignatureResolution properties to each entry.
+
+        This is distinct from error code translation (Resolve-ErrorCode), which looks up
+        numeric codes. Signature detection matches the message text itself to identify
+        known issues that may not have explicit error codes.
+
+    .EXAMPLE
+        $entries = Invoke-SignatureDetection -Entries $collapsedEntries
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$Entries
+    )
+
+    if (-not $script:SignatureDB) {
+        Import-SignatureDatabase
+    }
+
+    if ($Entries.Count -eq 0 -or $script:SignatureDB.Count -eq 0) {
+        # Pass through with null signature properties
+        foreach ($entry in $Entries) {
+            $entry | Add-Member -NotePropertyName SignatureId          -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureName        -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureExplanation -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureResolution  -NotePropertyValue $null -Force
+        }
+        return $Entries
+    }
+
+    # Pre-compile regexes for performance
+    $compiled = @($script:SignatureDB | ForEach-Object {
+        [pscustomobject]@{
+            Sig   = $_
+            Regex = [regex]::new($_.Pattern, [System.Text.RegularExpressions.RegexOptions]::Compiled)
+            Comps = @($_.Components)
+        }
+    })
+
+    foreach ($entry in $Entries) {
+        $matchedSig = $null
+
+        foreach ($c in $compiled) {
+            # Component filter: if signature specifies components, entry must match one
+            if ($c.Comps.Count -gt 0 -and $entry.Component -notin $c.Comps) {
+                continue
+            }
+
+            if ($c.Regex.IsMatch($entry.Message)) {
+                $matchedSig = $c.Sig
+                break
+            }
+        }
+
+        if ($matchedSig) {
+            $entry | Add-Member -NotePropertyName SignatureId          -NotePropertyValue $matchedSig.Id          -Force
+            $entry | Add-Member -NotePropertyName SignatureName        -NotePropertyValue $matchedSig.Name        -Force
+            $entry | Add-Member -NotePropertyName SignatureExplanation -NotePropertyValue $matchedSig.Explanation -Force
+            $entry | Add-Member -NotePropertyName SignatureResolution  -NotePropertyValue $matchedSig.Resolution  -Force
+        }
+        else {
+            $entry | Add-Member -NotePropertyName SignatureId          -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureName        -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureExplanation -NotePropertyValue $null -Force
+            $entry | Add-Member -NotePropertyName SignatureResolution  -NotePropertyValue $null -Force
+        }
+    }
+
+    return $Entries
+}
+
+# ---------------------------------------------------------------------------
+# Event Clustering
+# ---------------------------------------------------------------------------
+
+$script:EventDB = $null
+
+function Import-EventDatabase {
+    <#
+    .SYNOPSIS
+        Loads the event definition database from JSON.
+    #>
+    param(
+        [string]$Path
+    )
+
+    if (-not $Path) {
+        $Path = Join-Path (Split-Path $PSScriptRoot -Parent) 'EventDB\event-definitions.json'
+    }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Log "Event database not found: $Path" -Level WARN -Quiet
+        $script:EventDB = @{
+            EventTemplates = @()
+            ComponentNames = @{}
+        }
+        return
+    }
+
+    try {
+        $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $script:EventDB = @{
+            EventTemplates = @($raw.EventTemplates)
+            ComponentNames = @{}
+        }
+        if ($raw.ComponentNames) {
+            $raw.ComponentNames.PSObject.Properties | ForEach-Object {
+                $script:EventDB.ComponentNames[$_.Name] = $_.Value
+            }
+        }
+        Write-Log "Loaded $($script:EventDB.EventTemplates.Count) event templates" -Quiet
+    }
+    catch {
+        Write-Log "Failed to load event database: $_" -Level ERROR -Quiet
+        $script:EventDB = @{
+            EventTemplates = @()
+            ComponentNames = @{}
+        }
+    }
+}
+
+function Get-EventClusterName {
+    <#
+    .SYNOPSIS
+        Determines the event name for a cluster of entries based on signature matches
+        and component composition. Private helper for Group-LogEvents.
+    #>
+    param(
+        [pscustomobject[]]$ClusterEntries
+    )
+
+    $templates = $script:EventDB.EventTemplates
+    $componentNames = $script:EventDB.ComponentNames
+
+    # Check signature-based templates
+    $sigIds = @($ClusterEntries | Where-Object { $_.SignatureId } | ForEach-Object { $_.SignatureId } | Select-Object -Unique)
+
+    if ($sigIds.Count -gt 0 -and $templates.Count -gt 0) {
+        foreach ($template in $templates) {
+            $templateSigIds = @($template.SignatureIds)
+            foreach ($sid in $sigIds) {
+                if ($sid -in $templateSigIds) {
+                    return $template.Name
+                }
+            }
+        }
+    }
+
+    # Fallback: name from dominant component
+    $dominantComponent = ($ClusterEntries | Group-Object Component | Sort-Object Count -Descending | Select-Object -First 1).Name
+
+    if ($componentNames -and $componentNames.ContainsKey($dominantComponent)) {
+        return "$($componentNames[$dominantComponent]) activity"
+    }
+
+    return "$dominantComponent activity"
+}
+
+function Group-LogEvents {
+    <#
+    .SYNOPSIS
+        Groups log entries into event clusters by time proximity.
+
+    .DESCRIPTION
+        Sorts entries chronologically and groups consecutive entries within a time
+        gap threshold into named event clusters. Each cluster is named based on
+        signature matches (using event templates) or the dominant component.
+
+        Adds EventId, EventName, EventOutcome, and EventEntryCount properties to
+        each entry. Singleton entries (not part of any cluster) receive null values.
+
+    .PARAMETER Entries
+        Array of log entry objects (after collapse and signature detection).
+
+    .PARAMETER GapSeconds
+        Maximum gap in seconds between consecutive entries to remain in the same
+        cluster. Default is 120 seconds.
+
+    .EXAMPLE
+        $entries = Group-LogEvents -Entries $signatureEntries -GapSeconds 120
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$Entries,
+
+        [int]$GapSeconds = 120
+    )
+
+    if ($Entries.Count -eq 0) { return $Entries }
+
+    if (-not $script:EventDB) { Import-EventDatabase }
+
+    # Sort by DateTime
+    $sorted = @($Entries | Sort-Object DateTime)
+
+    # Phase 1: Time-gap clustering
+    $clusters = [System.Collections.ArrayList]::new()
+    $current  = [System.Collections.ArrayList]::new()
+    [void]$current.Add($sorted[0])
+
+    for ($i = 1; $i -lt $sorted.Count; $i++) {
+        $gap = ($sorted[$i].DateTime - $sorted[$i - 1].DateTime).TotalSeconds
+        if ($gap -le $GapSeconds) {
+            [void]$current.Add($sorted[$i])
+        }
+        else {
+            [void]$clusters.Add($current.ToArray())
+            $current = [System.Collections.ArrayList]::new()
+            [void]$current.Add($sorted[$i])
+        }
+    }
+    [void]$clusters.Add($current.ToArray())
+
+    # Phase 2: Name each cluster and assign properties
+    $eventCounter = 0
+
+    foreach ($cluster in $clusters) {
+        if ($cluster.Count -lt 2) {
+            # Singleton - no event grouping
+            foreach ($entry in $cluster) {
+                $entry | Add-Member -NotePropertyName EventId         -NotePropertyValue $null -Force
+                $entry | Add-Member -NotePropertyName EventName       -NotePropertyValue $null -Force
+                $entry | Add-Member -NotePropertyName EventOutcome    -NotePropertyValue $null -Force
+                $entry | Add-Member -NotePropertyName EventEntryCount -NotePropertyValue $null -Force
+            }
+            continue
+        }
+
+        $eventCounter++
+        $eventId   = "EVT-{0:D3}" -f $eventCounter
+        $eventName = Get-EventClusterName -ClusterEntries $cluster
+
+        # Outcome = worst severity in cluster
+        $worstType = ($cluster | Measure-Object -Property Type -Maximum).Maximum
+        $outcome = switch ($worstType) {
+            3       { 'Error' }
+            2       { 'Warning' }
+            default { 'Info' }
+        }
+
+        $count = $cluster.Count
+        foreach ($entry in $cluster) {
+            $entry | Add-Member -NotePropertyName EventId         -NotePropertyValue $eventId   -Force
+            $entry | Add-Member -NotePropertyName EventName       -NotePropertyValue $eventName -Force
+            $entry | Add-Member -NotePropertyName EventOutcome    -NotePropertyValue $outcome   -Force
+            $entry | Add-Member -NotePropertyName EventEntryCount -NotePropertyValue $count     -Force
+        }
+    }
+
+    return $sorted
+}
+
+function Merge-LogTimeline {
+    <#
+    .SYNOPSIS
+        Merges entries from multiple analysis results into a single chronological
+        timeline with cross-engine event clustering.
+
+    .DESCRIPTION
+        Combines AllEntries from one or more analysis result objects, then re-runs
+        Group-LogEvents on the merged set. This enables cross-engine event correlation:
+        entries from LocationServices (App Deployment engine) and ccmsetup (Client
+        Install engine) that occur in the same time window are grouped into a single
+        event cluster, revealing causal relationships across log files.
+
+        When only one analysis result is provided, the entries are already clustered
+        and this function simply re-sorts them chronologically.
+
+    .PARAMETER AnalysisResults
+        Array of analysis result objects (from Invoke-*Analysis functions).
+        Each must have an AllEntries property.
+
+    .PARAMETER GapSeconds
+        Maximum gap in seconds between consecutive entries for clustering.
+        Passed through to Group-LogEvents. Default 120.
+
+    .EXAMPLE
+        $merged = Merge-LogTimeline -AnalysisResults @($appResult, $updateResult, $clientResult)
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [pscustomobject[]]$AnalysisResults,
+
+        [int]$GapSeconds = 120
+    )
+
+    $allEntries = [System.Collections.ArrayList]::new()
+
+    foreach ($result in $AnalysisResults) {
+        if ($result.AllEntries -and $result.AllEntries.Count -gt 0) {
+            [void]$allEntries.AddRange($result.AllEntries)
+        }
+    }
+
+    if ($allEntries.Count -eq 0) { return @() }
+
+    # Re-cluster across engine boundaries
+    return Group-LogEvents -Entries $allEntries.ToArray() -GapSeconds $GapSeconds
+}
+
+# ---------------------------------------------------------------------------
+# 3010 Exit Code Masking Detection
+# ---------------------------------------------------------------------------
+
+function Get-ClientMsiExitCode {
+    <#
+    .SYNOPSIS
+        Extracts the real MSI exit code from client.msi.log.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$ClientMsiLogPath
+    )
+
+    if (-not (Test-Path -LiteralPath $ClientMsiLogPath)) {
+        return [pscustomobject]@{ ExitCode = $null; Timestamp = $null; Found = $false }
+    }
+
+    try {
+        $content = Read-LATLogFileShared -Path $ClientMsiLogPath
+    }
+    catch {
+        return [pscustomobject]@{ ExitCode = $null; Timestamp = $null; Found = $false }
+    }
+
+    # Look for the final return value line (MSI logs end with this)
+    # Pattern: "MainEngineThread is returning X" or "return value X"
+    $returnPattern = '(?:MainEngineThread is returning|return value)\s+(\d+)'
+    $allMatches = [regex]::Matches($content, $returnPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+
+    if ($allMatches.Count -gt 0) {
+        # Use the LAST match (final exit code)
+        $lastMatch = $allMatches[$allMatches.Count - 1]
+        $exitCode  = [int]$lastMatch.Groups[1].Value
+
+        # Try to extract timestamp from nearby CMTrace-format wrapper
+        $tsPattern = 'date="(?<Date>[^"]+)"\s+.*?time="(?<Time>[^"]+)"'
+        $startPos  = [math]::Max(0, $lastMatch.Index - 500)
+        $segment   = $content.Substring($startPos, [math]::Min(600, $content.Length - $startPos))
+        $tsMatch   = [regex]::Match($segment, $tsPattern)
+
+        $timestamp = $null
+        if ($tsMatch.Success) {
+            try {
+                $dateStr  = $tsMatch.Groups['Date'].Value
+                $timeStr  = ($tsMatch.Groups['Time'].Value) -replace '[+-]\d+$', ''
+                $timestamp = [datetime]::Parse("$dateStr $timeStr")
+            } catch {}
+        }
+
+        # If no CMTrace timestamp, use file last write time
+        if ($null -eq $timestamp) {
+            $timestamp = (Get-Item -LiteralPath $ClientMsiLogPath).LastWriteTime
+        }
+
+        return [pscustomobject]@{
+            ExitCode  = $exitCode
+            Timestamp = $timestamp
+            Found     = $true
+        }
+    }
+
+    return [pscustomobject]@{ ExitCode = $null; Timestamp = $null; Found = $false }
+}
+
+function Get-LastRebootTime {
+    <#
+    .SYNOPSIS
+        Gets the last reboot time for a remote device.
+        Primary: WMI. Fallback: MECM data.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    # Try WMI first
+    try {
+        $os = Get-CimInstance -ClassName Win32_OperatingSystem -ComputerName $Hostname -ErrorAction Stop
+        if ($os.LastBootUpTime) {
+            return [pscustomobject]@{
+                LastRebootTime = $os.LastBootUpTime
+                Source         = 'WMI'
+                Success        = $true
+            }
+        }
+    }
+    catch {
+        Write-Log "WMI reboot query failed for $Hostname - $($_.Exception.Message)" -Level WARN
+    }
+
+    # Fallback: try legacy WMI
+    try {
+        $wmi = Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Hostname -ErrorAction Stop
+        if ($wmi.LastBootUpTime) {
+            $bootTime = [System.Management.ManagementDateTimeConverter]::ToDateTime($wmi.LastBootUpTime)
+            return [pscustomobject]@{
+                LastRebootTime = $bootTime
+                Source         = 'WMI-Legacy'
+                Success        = $true
+            }
+        }
+    }
+    catch {
+        Write-Log "Legacy WMI reboot query also failed for $Hostname" -Level WARN
+    }
+
+    return [pscustomobject]@{
+        LastRebootTime = $null
+        Source         = 'None'
+        Success        = $false
+    }
+}
+
+function Test-3010RebootPending {
+    <#
+    .SYNOPSIS
+        Determines if a 3010 from client.msi.log is still pending reboot.
+
+    .DESCRIPTION
+        1. Gets real MSI exit code from client.msi.log
+        2. If not 3010, returns not-pending
+        3. Gets last reboot time for the device
+        4. Compares 3010 timestamp against last reboot
+        5. If rebooted AFTER 3010 -> not pending
+        6. If NOT rebooted after 3010 -> pending reboot
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$ClientMsiLogPath,
+
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    $msiResult = Get-ClientMsiExitCode -ClientMsiLogPath $ClientMsiLogPath
+
+    if (-not $msiResult.Found) {
+        return [pscustomobject]@{
+            MsiExitCode   = $null
+            MsiTimestamp  = $null
+            LastReboot    = $null
+            RebootPending = $false
+            Explanation   = 'Could not determine MSI exit code from client.msi.log'
+        }
+    }
+
+    if ($msiResult.ExitCode -ne 3010) {
+        return [pscustomobject]@{
+            MsiExitCode   = $msiResult.ExitCode
+            MsiTimestamp  = $msiResult.Timestamp
+            LastReboot    = $null
+            RebootPending = $false
+            Explanation   = "MSI exit code is $($msiResult.ExitCode), not 3010 - no reboot required."
+        }
+    }
+
+    # Exit code IS 3010 - check if server has rebooted since
+    $rebootResult = Get-LastRebootTime -Hostname $Hostname
+
+    if (-not $rebootResult.Success) {
+        return [pscustomobject]@{
+            MsiExitCode   = 3010
+            MsiTimestamp  = $msiResult.Timestamp
+            LastReboot    = $null
+            RebootPending = $true
+            Explanation   = "MSI returned 3010 at $($msiResult.Timestamp) but could not determine last reboot time. Assume reboot pending."
+        }
+    }
+
+    $rebooted = $rebootResult.LastRebootTime -gt $msiResult.Timestamp
+
+    if ($rebooted) {
+        return [pscustomobject]@{
+            MsiExitCode   = 3010
+            MsiTimestamp  = $msiResult.Timestamp
+            LastReboot    = $rebootResult.LastRebootTime
+            RebootPending = $false
+            Explanation   = "MSI returned 3010 at $($msiResult.Timestamp) but server rebooted at $($rebootResult.LastRebootTime). Reboot completed."
+        }
+    }
+
+    return [pscustomobject]@{
+        MsiExitCode   = 3010
+        MsiTimestamp  = $msiResult.Timestamp
+        LastReboot    = $rebootResult.LastRebootTime
+        RebootPending = $true
+        Explanation   = "MSI returned 3010 at $($msiResult.Timestamp). Server last rebooted at $($rebootResult.LastRebootTime) which is BEFORE the 3010. Reboot is still pending."
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Root Cause Detection
+# ---------------------------------------------------------------------------
+
+function Test-FirewallBlock {
+    <#
+    .SYNOPSIS
+        Checks log entries and connectivity for firewall/port issues.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject[]]$LogEntries,
+
+        [string]$Hostname
+    )
+
+    $evidence = @()
+
+    # Check log patterns
+    $firewallPatterns = @(
+        'Failed to send'
+        'connection timed out'
+        '0x800706BA'
+        'RPC server is unavailable'
+        'BITS.*error.*connection'
+        'Failed to connect to'
+        'No reply from'
+        'The network path was not found'
+        '0x80070035'
+    )
+
+    foreach ($entry in $LogEntries) {
+        foreach ($pattern in $firewallPatterns) {
+            if ($entry.Message -match $pattern) {
+                $evidence += "[$($entry.LogFile)] $($entry.DateTime): $($entry.Message.Substring(0, [math]::Min(200, $entry.Message.Length)))"
+                break
+            }
+        }
+    }
+
+    # Test common MECM ports if hostname provided
+    $blockedPorts = @()
+    if ($Hostname) {
+        $ports = @(80, 443, 10123, 8530, 8531)
+        foreach ($port in $ports) {
+            try {
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $connect = $tcp.BeginConnect($Hostname, $port, $null, $null)
+                $wait = $connect.AsyncWaitHandle.WaitOne(2000, $false)
+                if (-not $wait -or -not $tcp.Connected) {
+                    $blockedPorts += $port
+                }
+                $tcp.Close()
+            }
+            catch {
+                $blockedPorts += $port
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        Detected     = ($evidence.Count -gt 0) -or ($blockedPorts.Count -gt 0)
+        Evidence     = $evidence
+        BlockedPorts = $blockedPorts
+    }
+}
+
+function Test-DomainJoined {
+    <#
+    .SYNOPSIS
+        Checks if a device is domain-joined via WMI.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    try {
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ComputerName $Hostname -ErrorAction Stop
+        return [pscustomobject]@{
+            DomainJoined = $cs.PartOfDomain
+            Domain       = $cs.Domain
+            Source       = 'WMI'
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            DomainJoined = $null
+            Domain       = $null
+            Source       = "WMI query failed: $($_.Exception.Message)"
+        }
+    }
+}
+
+function Test-DnsResolution {
+    <#
+    .SYNOPSIS
+        Tests whether the device can be resolved in DNS.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    try {
+        $dns = Resolve-DnsName -Name $Hostname -ErrorAction Stop
+        $ip  = ($dns | Where-Object { $_.QueryType -eq 'A' -or $_.QueryType -eq 'AAAA' } | Select-Object -First 1).IPAddress
+
+        return [pscustomobject]@{
+            Resolvable = $true
+            IPAddress  = $ip
+            Error      = $null
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Resolvable = $false
+            IPAddress  = $null
+            Error      = $_.Exception.Message
+        }
+    }
+}
+
+function Test-MppCorruption {
+    <#
+    .SYNOPSIS
+        Checks MPP MSI log for MOF compile failures.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$MppLogPath
+    )
+
+    if (-not (Test-Path -LiteralPath $MppLogPath)) {
+        return [pscustomobject]@{ Detected = $false; Evidence = @() }
+    }
+
+    try {
+        $content = Read-LATLogFileShared -Path $MppLogPath
+    }
+    catch {
+        return [pscustomobject]@{ Detected = $false; Evidence = @() }
+    }
+
+    $evidence = @()
+    $mppPatterns = @(
+        'mofcomp.*fail'
+        'failed to compile'
+        'MOF compile'
+        'error.*1603.*PolicyPlatform'
+        'CustomAction.*MofCompile.*returned actual error code 1603'
+    )
+
+    foreach ($pattern in $mppPatterns) {
+        $matches = [regex]::Matches($content, $pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($m in $matches) {
+            $start = [math]::Max(0, $m.Index - 50)
+            $len   = [math]::Min(300, $content.Length - $start)
+            $evidence += $content.Substring($start, $len).Trim()
+        }
+    }
+
+    return [pscustomobject]@{
+        Detected = ($evidence.Count -gt 0)
+        Evidence = ($evidence | Select-Object -Unique)
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Analysis Engines
+# ---------------------------------------------------------------------------
+
+function Invoke-AppDeploymentAnalysis {
+    <#
+    .SYNOPSIS
+        Analyzes application deployment logs for a device.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$LogFolder,
+
+        [string]$Hostname,
+
+        [datetime]$Since
+    )
+
+    $appLogs = @('AppEnforce', 'AppDiscovery', 'CAS', 'ContentTransferManager', 'LocationServices')
+    $allEntries = @()
+
+    foreach ($logName in $appLogs) {
+        $logPath = Join-Path $LogFolder "$logName.log"
+        if (Test-Path -LiteralPath $logPath) {
+            $params = @{ Path = $logPath; TypeFilter = @(2, 3) }
+            if ($Since) { $params['After'] = $Since }
+            $allEntries += ConvertFrom-CMTraceLog @params
+        }
+    }
+
+    if ($allEntries.Count -eq 0) {
+        return [pscustomobject]@{
+            Hostname        = $Hostname
+            AnalysisType    = 'AppDeployment'
+            Timestamp       = Get-Date
+            TotalEntries    = 0
+            Errors          = @()
+            Warnings        = @()
+            Summary         = "No application deployment log entries found."
+            Recommendations = @()
+        }
+    }
+
+    $enriched = Find-LogErrors -LogEntries $allEntries -IncludeInfo
+    $enriched = Compress-LogEntries -Entries $enriched
+    $enriched = Invoke-SignatureDetection -Entries $enriched
+    $enriched = Group-LogEvents -Entries $enriched
+    $errors   = @($enriched | Where-Object { $_.Type -eq 3 })
+    $warnings = @($enriched | Where-Object { $_.Type -eq 2 })
+
+    $recommendations = @()
+    if ($errors.Count -gt 0) {
+        foreach ($err in $errors) {
+            if ($err.ErrorTranslation -and $err.ErrorTranslation.Resolution) {
+                $recommendations += $err.ErrorTranslation.Resolution
+            }
+            if ($err.SignatureResolution) {
+                $recommendations += $err.SignatureResolution
+            }
+        }
+        $recommendations = @($recommendations | Select-Object -Unique)
+    }
+
+    $summaryLines = @(
+        "Application Deployment Analysis for $Hostname"
+        "Total log entries: $($allEntries.Count)"
+        "Errors: $($errors.Count)"
+        "Warnings: $($warnings.Count)"
+    )
+    if ($errors.Count -gt 0) {
+        $latest = $errors | Sort-Object DateTime -Descending | Select-Object -First 1
+        $summaryLines += "Most recent error: [$($latest.LogFile)] $($latest.ErrorCode) - $($latest.Message.Substring(0, [math]::Min(150, $latest.Message.Length)))"
+    }
+
+    return [pscustomobject]@{
+        Hostname        = $Hostname
+        AnalysisType    = 'AppDeployment'
+        Timestamp       = Get-Date
+        TotalEntries    = $allEntries.Count
+        Errors          = $errors
+        Warnings        = $warnings
+        AllEntries      = $enriched
+        Summary         = ($summaryLines -join "`r`n")
+        Recommendations = $recommendations
+    }
+}
+
+function Invoke-SoftwareUpdateAnalysis {
+    <#
+    .SYNOPSIS
+        Analyzes software update logs for a device.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$LogFolder,
+
+        [string]$Hostname,
+
+        [datetime]$Since
+    )
+
+    $updateLogs = @('WUAHandler', 'UpdatesDeployment', 'UpdatesHandler', 'UpdatesStore')
+    $allEntries = @()
+
+    foreach ($logName in $updateLogs) {
+        $logPath = Join-Path $LogFolder "$logName.log"
+        if (Test-Path -LiteralPath $logPath) {
+            $params = @{ Path = $logPath; TypeFilter = @(2, 3) }
+            if ($Since) { $params['After'] = $Since }
+            $allEntries += ConvertFrom-CMTraceLog @params
+        }
+    }
+
+    if ($allEntries.Count -eq 0) {
+        return [pscustomobject]@{
+            Hostname        = $Hostname
+            AnalysisType    = 'SoftwareUpdates'
+            Timestamp       = Get-Date
+            TotalEntries    = 0
+            Errors          = @()
+            Warnings        = @()
+            Summary         = "No software update log entries found."
+            Recommendations = @()
+        }
+    }
+
+    $enriched = Find-LogErrors -LogEntries $allEntries -IncludeInfo
+    $enriched = Compress-LogEntries -Entries $enriched
+    $enriched = Invoke-SignatureDetection -Entries $enriched
+    $enriched = Group-LogEvents -Entries $enriched
+    $errors   = @($enriched | Where-Object { $_.Type -eq 3 })
+    $warnings = @($enriched | Where-Object { $_.Type -eq 2 })
+
+    $recommendations = @()
+    foreach ($err in $errors) {
+        if ($err.ErrorTranslation -and $err.ErrorTranslation.Resolution) {
+            $recommendations += $err.ErrorTranslation.Resolution
+        }
+        if ($err.SignatureResolution) {
+            $recommendations += $err.SignatureResolution
+        }
+    }
+    $recommendations = @($recommendations | Select-Object -Unique)
+
+    $summaryLines = @(
+        "Software Update Analysis for $Hostname"
+        "Total log entries: $($allEntries.Count)"
+        "Errors: $($errors.Count)"
+        "Warnings: $($warnings.Count)"
+    )
+
+    return [pscustomobject]@{
+        Hostname        = $Hostname
+        AnalysisType    = 'SoftwareUpdates'
+        Timestamp       = Get-Date
+        TotalEntries    = $allEntries.Count
+        Errors          = $errors
+        Warnings        = $warnings
+        AllEntries      = $enriched
+        Summary         = ($summaryLines -join "`r`n")
+        Recommendations = $recommendations
+    }
+}
+
+function Invoke-ClientInstallAnalysis {
+    <#
+    .SYNOPSIS
+        Analyzes CCM client installation logs for a device.
+        Includes 3010 masking detection and root cause analysis.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$LogFolder,
+
+        [string]$Hostname,
+
+        [datetime]$Since
+    )
+
+    $clientLogs = @('ccmsetup', 'client.msi', 'MicrosoftPolicyPlatformSetup.msi')
+    $allEntries = @()
+
+    foreach ($logName in $clientLogs) {
+        $logPath = Join-Path $LogFolder "$logName.log"
+        if (Test-Path -LiteralPath $logPath) {
+            $params = @{ Path = $logPath; TypeFilter = @(2, 3) }
+            if ($Since) { $params['After'] = $Since }
+            $allEntries += ConvertFrom-CMTraceLog @params
+        }
+    }
+
+    $enriched = Find-LogErrors -LogEntries $allEntries -IncludeInfo
+    $enriched = Compress-LogEntries -Entries $enriched
+    $enriched = Invoke-SignatureDetection -Entries $enriched
+    $enriched = Group-LogEvents -Entries $enriched
+    $errors   = @($enriched | Where-Object { $_.Type -eq 3 })
+    $warnings = @($enriched | Where-Object { $_.Type -eq 2 })
+
+    # 3010 detection
+    $clientMsiPath = Join-Path $LogFolder "client.msi.log"
+    $rebootCheck   = $null
+    if ($Hostname -and (Test-Path -LiteralPath $clientMsiPath)) {
+        $rebootCheck = Test-3010RebootPending -ClientMsiLogPath $clientMsiPath -Hostname $Hostname
+    }
+
+    # Root cause detection
+    $rootCauses = @()
+
+    # Firewall check
+    $firewallResult = Test-FirewallBlock -LogEntries $allEntries -Hostname $Hostname
+    if ($firewallResult.Detected) {
+        $rootCauses += [pscustomobject]@{
+            Cause    = 'Firewall / Port Block'
+            Details  = "Blocked ports: $($firewallResult.BlockedPorts -join ', ')"
+            Evidence = $firewallResult.Evidence
+        }
+    }
+
+    # MPP corruption check
+    $mppPath = Join-Path $LogFolder "MicrosoftPolicyPlatformSetup.msi.log"
+    if (Test-Path -LiteralPath $mppPath) {
+        $mppResult = Test-MppCorruption -MppLogPath $mppPath
+        if ($mppResult.Detected) {
+            $rootCauses += [pscustomobject]@{
+                Cause    = 'Corrupt Microsoft Policy Platform'
+                Details  = 'MOF compile failure detected. Requires: uninstall MPP via registry uninstall string, remove ccmsetup retry task from Task Scheduler, then re-run ccmsetup.'
+                Evidence = $mppResult.Evidence
+            }
+        }
+    }
+
+    # DNS and domain checks (only if hostname provided and errors suggest connectivity issues)
+    if ($Hostname) {
+        $dnsResult = Test-DnsResolution -Hostname $Hostname
+        if (-not $dnsResult.Resolvable) {
+            $rootCauses += [pscustomobject]@{
+                Cause    = 'DNS Resolution Failure'
+                Details  = "Server not registered in DNS (Infoblox): $($dnsResult.Error)"
+                Evidence = @()
+            }
+        }
+
+        $domainResult = Test-DomainJoined -Hostname $Hostname
+        if ($domainResult.DomainJoined -eq $false) {
+            $rootCauses += [pscustomobject]@{
+                Cause    = 'Server Not Domain Joined'
+                Details  = "Server is not a member of any domain."
+                Evidence = @()
+            }
+        }
+    }
+
+    $recommendations = @()
+    foreach ($rc in $rootCauses) {
+        $recommendations += "$($rc.Cause): $($rc.Details)"
+    }
+    foreach ($err in $errors) {
+        if ($err.ErrorTranslation -and $err.ErrorTranslation.Resolution) {
+            $recommendations += $err.ErrorTranslation.Resolution
+        }
+        if ($err.SignatureResolution) {
+            $recommendations += $err.SignatureResolution
+        }
+    }
+    $recommendations = @($recommendations | Select-Object -Unique)
+
+    $summaryLines = @(
+        "Client Installation Analysis for $Hostname"
+        "Total log entries: $($allEntries.Count)"
+        "Errors: $($errors.Count)"
+        "Warnings: $($warnings.Count)"
+    )
+    if ($rebootCheck) {
+        $summaryLines += "3010 Reboot Status: $($rebootCheck.Explanation)"
+    }
+    if ($rootCauses.Count -gt 0) {
+        $summaryLines += "Root Causes Detected: $($rootCauses.Count)"
+        foreach ($rc in $rootCauses) {
+            $summaryLines += "  - $($rc.Cause)"
+        }
+    }
+
+    return [pscustomobject]@{
+        Hostname        = $Hostname
+        AnalysisType    = 'ClientInstall'
+        Timestamp       = Get-Date
+        TotalEntries    = $allEntries.Count
+        Errors          = $errors
+        Warnings        = $warnings
+        AllEntries      = $enriched
+        RebootCheck     = $rebootCheck
+        RootCauses      = $rootCauses
+        Summary         = ($summaryLines -join "`r`n")
+        Recommendations = $recommendations
+    }
+}
+
+function Test-RebootPending {
+    <#
+    .SYNOPSIS
+        Convenience wrapper - checks if a device has a pending reboot
+        from CCM client install.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$LogFolder,
+
+        [Parameter(Mandatory)]
+        [string]$Hostname
+    )
+
+    $clientMsiPath = Join-Path $LogFolder "client.msi.log"
+    if (-not (Test-Path -LiteralPath $clientMsiPath)) {
+        return [pscustomobject]@{
+            RebootPending = $false
+            Explanation   = "client.msi.log not found in $LogFolder"
+        }
+    }
+
+    return Test-3010RebootPending -ClientMsiLogPath $clientMsiPath -Hostname $Hostname
+}
+
+# ---------------------------------------------------------------------------
+# Export / Reporting
+# ---------------------------------------------------------------------------
+
+function Export-AnalysisCsv {
+    <#
+    .SYNOPSIS
+        Exports analysis results to a CSV file.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject[]]$Results,
+
+        [Parameter(Mandatory)]
+        [string]$OutputPath
+    )
+
+    $rows = @()
+    foreach ($result in $Results) {
+        $entries = if ($result.AllEntries) { $result.AllEntries } else { @() }
+        foreach ($entry in $entries) {
+            $translation = ''
+            if ($entry.ErrorTranslation -and $entry.ErrorTranslation.Message) {
+                $translation = $entry.ErrorTranslation.Message
+            }
+
+            $rows += [pscustomobject]@{
+                Device      = $result.Hostname
+                LogFile     = $entry.LogFile
+                Severity    = $entry.Severity
+                DateTime    = $entry.DateTime
+                Component   = $entry.Component
+                ErrorCode   = $entry.ErrorCode
+                Translation = $translation
+                Message     = $entry.Message
+            }
+        }
+    }
+
+    if ($rows.Count -gt 0) {
+        $rows | Export-Csv -LiteralPath $OutputPath -NoTypeInformation -Encoding UTF8
+        Write-Log "Exported $($rows.Count) rows to $OutputPath"
+    } else {
+        Write-Log "No data to export." -Level WARN
+    }
+}
+
+function Export-AnalysisHtml {
+    <#
+    .SYNOPSIS
+        Exports analysis results to a styled, self-contained HTML report.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject[]]$Results,
+
+        [Parameter(Mandatory)]
+        [string]$OutputPath,
+
+        [string]$ReportTitle = 'MECM Log Analysis Report'
+    )
+
+    $css = @(
+        'body { font-family: Segoe UI, Arial, sans-serif; margin: 20px; background: #f5f5f5; }'
+        'h1 { color: #0078D4; }'
+        'h2 { color: #333; border-bottom: 2px solid #0078D4; padding-bottom: 5px; }'
+        '.summary { background: #fff; padding: 15px; border-radius: 6px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }'
+        '.summary-stat { display: inline-block; margin-right: 30px; }'
+        '.stat-value { font-size: 24px; font-weight: bold; }'
+        '.stat-label { font-size: 12px; color: #666; }'
+        '.error-count { color: #B00020; }'
+        '.warning-count { color: #B86E00; }'
+        'table { border-collapse: collapse; width: 100%; background: #fff; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }'
+        'th { background: #0078D4; color: #fff; padding: 10px; text-align: left; font-size: 13px; }'
+        'td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 13px; }'
+        'tr:nth-child(even) { background: #f8fafc; }'
+        '.severity-error { color: #B00020; font-weight: bold; }'
+        '.severity-warning { color: #B86E00; }'
+        '.severity-info { color: #666; }'
+        '.recommendation { background: #FFF3CD; padding: 10px; border-left: 4px solid #FFC107; margin: 5px 0; }'
+        '.root-cause { background: #F8D7DA; padding: 10px; border-left: 4px solid #DC3545; margin: 5px 0; }'
+        '.reboot-pending { background: #FFE0B2; padding: 10px; border-left: 4px solid #FF9800; margin: 5px 0; }'
+        '.timestamp { color: #999; font-size: 12px; }'
+    ) -join "`r`n"
+
+    $bodyParts = @()
+    $bodyParts += "<h1>$ReportTitle</h1>"
+    $bodyParts += "<p class='timestamp'>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>"
+
+    foreach ($result in $Results) {
+        $bodyParts += "<h2>$($result.Hostname) - $($result.AnalysisType)</h2>"
+
+        # Summary box
+        $errorCount   = if ($result.Errors)   { $result.Errors.Count }   else { 0 }
+        $warningCount = if ($result.Warnings) { $result.Warnings.Count } else { 0 }
+
+        $bodyParts += "<div class='summary'>"
+        $bodyParts += "<div class='summary-stat'><div class='stat-value'>$($result.TotalEntries)</div><div class='stat-label'>Total Entries</div></div>"
+        $bodyParts += "<div class='summary-stat'><div class='stat-value error-count'>$errorCount</div><div class='stat-label'>Errors</div></div>"
+        $bodyParts += "<div class='summary-stat'><div class='stat-value warning-count'>$warningCount</div><div class='stat-label'>Warnings</div></div>"
+        $bodyParts += "</div>"
+
+        # Root causes
+        if ($result.RootCauses -and $result.RootCauses.Count -gt 0) {
+            foreach ($rc in $result.RootCauses) {
+                $bodyParts += "<div class='root-cause'><strong>Root Cause: $($rc.Cause)</strong><br/>$($rc.Details)</div>"
+            }
+        }
+
+        # Reboot check
+        if ($result.RebootCheck -and $result.RebootCheck.RebootPending) {
+            $bodyParts += "<div class='reboot-pending'><strong>Reboot Pending</strong><br/>$($result.RebootCheck.Explanation)</div>"
+        }
+
+        # Recommendations
+        if ($result.Recommendations -and $result.Recommendations.Count -gt 0) {
+            foreach ($rec in $result.Recommendations) {
+                $bodyParts += "<div class='recommendation'>$rec</div>"
+            }
+        }
+
+        # Error/warning table
+        $entries = @()
+        if ($result.AllEntries) {
+            $entries = @($result.AllEntries | Where-Object { $_.Type -ge 2 } | Sort-Object DateTime -Descending)
+        }
+
+        if ($entries.Count -gt 0) {
+            $bodyParts += "<table>"
+            $bodyParts += "<tr><th>Time</th><th>Log</th><th>Severity</th><th>Component</th><th>Error Code</th><th>Translation</th><th>Message</th></tr>"
+
+            foreach ($entry in $entries) {
+                $severityClass = "severity-$($entry.Severity.ToLower())"
+                $translation   = ''
+                if ($entry.ErrorTranslation -and $entry.ErrorTranslation.Message) {
+                    $translation = [System.Web.HttpUtility]::HtmlEncode($entry.ErrorTranslation.Message)
+                }
+                $safeMsg = [System.Web.HttpUtility]::HtmlEncode($entry.Message)
+                if ($safeMsg.Length -gt 300) { $safeMsg = $safeMsg.Substring(0, 300) + '...' }
+
+                $bodyParts += "<tr>"
+                $bodyParts += "<td>$($entry.DateTime.ToString('yyyy-MM-dd HH:mm:ss'))</td>"
+                $bodyParts += "<td>$($entry.LogFile)</td>"
+                $bodyParts += "<td class='$severityClass'>$($entry.Severity)</td>"
+                $bodyParts += "<td>$($entry.Component)</td>"
+                $bodyParts += "<td>$($entry.ErrorCode)</td>"
+                $bodyParts += "<td>$translation</td>"
+                $bodyParts += "<td>$safeMsg</td>"
+                $bodyParts += "</tr>"
+            }
+
+            $bodyParts += "</table>"
+        }
+    }
+
+    $html = @(
+        '<!DOCTYPE html>'
+        '<html><head>'
+        '<meta charset="utf-8">'
+        "<title>$ReportTitle</title>"
+        "<style>$css</style>"
+        '</head><body>'
+        ($bodyParts -join "`r`n")
+        '</body></html>'
+    ) -join "`r`n"
+
+    Set-Content -LiteralPath $OutputPath -Value $html -Encoding UTF8
+    Write-Log "HTML report exported to $OutputPath"
+}
+
+function New-AnalysisSummary {
+    <#
+    .SYNOPSIS
+        Generates a plain-text summary suitable for pasting into tickets/email.
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject[]]$Results
+    )
+
+    $lines = @()
+
+    foreach ($result in $Results) {
+        $lines += "=== DEVICE: $($result.Hostname) ==="
+        $lines += "Analysis: $($result.AnalysisType)"
+
+        $errorCount   = if ($result.Errors)   { $result.Errors.Count }   else { 0 }
+        $warningCount = if ($result.Warnings) { $result.Warnings.Count } else { 0 }
+
+        if ($errorCount -eq 0 -and $warningCount -eq 0) {
+            $lines += "Status: NO ISSUES FOUND"
+        } else {
+            $lines += "Status: $errorCount error(s), $warningCount warning(s)"
+        }
+
+        # Most recent error
+        if ($result.Errors -and $result.Errors.Count -gt 0) {
+            $latest = $result.Errors | Sort-Object DateTime -Descending | Select-Object -First 1
+            $msg = $latest.Message
+            if ($msg.Length -gt 150) { $msg = $msg.Substring(0, 150) + '...' }
+            $lines += "Most Recent Error: $($latest.ErrorCode) - $msg"
+
+            if ($latest.ErrorTranslation -and $latest.ErrorTranslation.Message) {
+                $lines += "Translation: $($latest.ErrorTranslation.Message)"
+            }
+            if ($latest.ErrorTranslation -and $latest.ErrorTranslation.Resolution) {
+                $lines += "Recommended Action: $($latest.ErrorTranslation.Resolution)"
+            }
+        }
+
+        # Reboot check
+        if ($result.RebootCheck) {
+            if ($result.RebootCheck.RebootPending) {
+                $lines += "Reboot Pending: YES - $($result.RebootCheck.Explanation)"
+            } else {
+                $lines += "Reboot Pending: NO"
+            }
+        }
+
+        # Root causes
+        if ($result.RootCauses -and $result.RootCauses.Count -gt 0) {
+            $lines += "Root Causes Detected:"
+            foreach ($rc in $result.RootCauses) {
+                $lines += "  - $($rc.Cause): $($rc.Details)"
+            }
+        }
+
+        $lines += ""
+    }
+
+    return ($lines -join "`r`n")
+}
+
+# ---------------------------------------------------------------------------
+# End of module
+# ---------------------------------------------------------------------------
+
+Export-ModuleMember -Function *

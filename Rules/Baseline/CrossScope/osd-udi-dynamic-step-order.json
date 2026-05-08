@@ -1,0 +1,28 @@
+{
+    "id": "osd-udi-dynamic-step-order",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "smsts", "pattern": "(?i)OSDResults" }
+        ],
+        "any": [
+            { "component": "smsts", "pattern": "(?i)dynamic" },
+            { "component": "smsts", "pattern": "(?i)UDI" }
+        ]
+    },
+    "verdict": "UDI task sequence completes but `OSDResults` does not list the applications the user selected. The dynamic Install Application step is positioned before the dynamic Install Package step, or static steps are interleaved incorrectly.",
+    "evidence": [
+        { "component": "smsts", "match": "OSDResults" },
+        { "component": "smsts", "match": "(?i)UDI" }
+    ],
+    "fix": "In the TS editor, reorder so the dynamic Install Package step runs BEFORE the dynamic Install Application step. All static Install Package and Install Application steps must be positioned AFTER both dynamic steps. The TS engine populates OSDResults by walking steps in execution order; out-of-order dynamic steps leave the results array empty.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/osdresults-not-display-installed-applications",
+        "https://learn.microsoft.com/mem/configmgr/mdt/use-the-mdt"
+    ]
+}

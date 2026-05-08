@@ -1,0 +1,24 @@
+{
+    "id": "wsus-setup-sql-permission",
+    "scope": "SoftwareUpdate",
+    "confidence": 88,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070643" }
+        ]
+    },
+    "verdict": "Fatal error during WSUS setup. The installing account lacks the `sysadmin` role on the target SQL Server instance, which WSUS provisioning requires.",
+    "evidence": [
+        { "match": "0x80070643" },
+        { "match": "WSUS" }
+    ],
+    "fix": "Grant the account running WSUS setup the SQL `sysadmin` server role on the target instance: `EXEC sp_addsrvrolemember 'DOMAIN\\user', 'sysadmin'` (run as a current sysadmin). Alternatively have a DBA run the WSUS installer. After setup completes and `SUSDB` is created, the elevated right can be revoked; WSUS runtime only needs `dbo` on `SUSDB`. If setup still fails with the sysadmin right, confirm the SQL Browser service is running and TCP is enabled on the instance.",
+    "references": [
+        "https://learn.microsoft.com/windows-server/administration/windows-server-update-services/deploy/deploy-the-wsus-role",
+        "https://learn.microsoft.com/sql/relational-databases/security/authentication-access/server-level-roles"
+    ]
+}

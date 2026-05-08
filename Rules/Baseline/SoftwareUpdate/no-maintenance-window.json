@@ -1,0 +1,23 @@
+{
+    "id": "no-maintenance-window",
+    "scope": "SoftwareUpdate",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "WUA-003" }
+        ]
+    },
+    "verdict": "Client has pending software updates but no open or upcoming maintenance window allows them to install.",
+    "evidence": [
+        { "component": "UpdatesDeployment", "match": "service window" },
+        { "component": "ServiceWindowManager", "match": "window" }
+    ],
+    "fix": "In the console, inspect the target collection's maintenance windows. Confirm at least one window exists with the correct type (`Software Updates` or `All deployments`; `Task Sequences` alone will not permit update installs). Verify the window schedule lines up with the expected install time (time zone / recurrence). If the business deadline is past, updates will eventually install outside the window.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/collections/use-maintenance-windows"
+    ]
+}

@@ -1,0 +1,28 @@
+{
+    "id": "site-db-move-trustworthy-off",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x8013150A" }
+        ],
+        "any": [
+            { "component": "SMSProv", "pattern": "(?i)create" },
+            { "component": "SMSProv", "pattern": "(?i)software update" }
+        ]
+    },
+    "verdict": "After moving the MECM site database to a new drive or instance, package/app creation fails. SQL dropped the `TRUSTWORTHY` flag during the move, which MECM requires for the SMS Provider's CLR assemblies.",
+    "evidence": [
+        { "component": "SMSProv", "match": "0x8013150A" },
+        { "component": "SMSProv", "match": "Unknown SQL Error" }
+    ],
+    "fix": "Against the CM site database: `ALTER DATABASE <CM_DB> SET TRUSTWORTHY ON;`. Verify the DB is owned by `sa`: `ALTER AUTHORIZATION ON DATABASE::<CM_DB> TO sa;`. Confirm `READ_COMMITTED_SNAPSHOT` is ON: `DBCC USEROPTIONS` and look for `isolation level read committed snapshot`. All three are prerequisites; only `TRUSTWORTHY` is lost during detach/attach, but verify the other two while you are in there.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/cannot-create-software-update-package",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/manage/modify-your-infrastructure"
+    ]
+}

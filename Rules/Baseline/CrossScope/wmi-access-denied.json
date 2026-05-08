@@ -1,0 +1,24 @@
+{
+    "id": "wmi-access-denied",
+    "scope": "CrossScope",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80041003" }
+        ]
+    },
+    "verdict": "WMI returned `WBEM_E_ACCESS_DENIED`. The calling account (typically SYSTEM for MECM operations) lacks permission on the target namespace. Commonly caused by a hardening baseline overwriting default ACLs on `root\\ccm` or `root\\cimv2`.",
+    "evidence": [
+        { "match": "0x80041003" },
+        { "component": "CcmExec", "match": "access denied" }
+    ],
+    "fix": "Open `wmimgmt.msc` -> right-click `WMI Control (Local)` -> Properties -> Security tab. On the affected namespace, confirm `NT AUTHORITY\\SYSTEM` has `Full Control` and `Remote Enable` at `This namespace and subnamespaces`. If ACLs were overwritten (audit: compare to a known-good machine), reapply defaults by recompiling the relevant MOF: `mofcomp $env:windir\\system32\\wbem\\cimwin32.mof` for cimv2; for `root\\ccm`, the cleanest restore is a CM client repair: `ccmsetup.exe /forceinstall`.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/wmisdk/wmi-error-constants",
+        "https://learn.microsoft.com/windows/win32/wmisdk/setting-namespace-security-descriptors"
+    ]
+}

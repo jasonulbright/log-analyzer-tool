@@ -1,0 +1,27 @@
+{
+    "id": "driver-pkg-migrate-perms",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "migmctrl", "pattern": "(?i)driver package" }
+        ],
+        "any": [
+            { "component": "migmctrl", "pattern": "(?i)insufficient|permission" },
+            { "component": "migmctrl", "pattern": "(?i)SCCM Provider" }
+        ]
+    },
+    "verdict": "Driver package migration failed with insufficient permissions on the source path. The SMS Provider account lacks NTFS/share permissions required to read the source.",
+    "evidence": [
+        { "component": "migmctrl", "match": "SCCM Provider" },
+        { "component": "migmctrl", "match": "(?i)privilege" }
+    ],
+    "fix": "Grant the SMS Provider machine account (typically the primary site server computer account) Full Control on the driver package source path AND on the share permissions. Verify by mapping the UNC from the site server while running as SYSTEM (`PsExec -s -i cmd.exe` then `dir <unc>`). If the source sits in a different domain, pass-through credentials via matching local accounts also work.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/insufficient-permissions-to-migrate-driver-package"
+    ]
+}

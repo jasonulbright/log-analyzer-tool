@@ -1,0 +1,28 @@
+{
+    "id": "wds-crash-redundant-dhcp-relay",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "WDS", "pattern": "(?i)(crash|stopped|failed)" }
+        ],
+        "any": [
+            { "component": "SMSPXE", "pattern": "(?i)PXE" },
+            { "component": "SMSPXE", "pattern": "(?i)duplicate" }
+        ]
+    },
+    "verdict": "WDS crashes under PXE load on a DP. Redundant DHCP relay (IP helper) on backup routers is forwarding duplicate PXE broadcasts, overwhelming the WDS single-threaded handler.",
+    "evidence": [
+        { "component": "WDS", "match": "(?i)crash" },
+        { "component": "SMSPXE", "match": "(?i)PXE" }
+    ],
+    "fix": "Either disable PXE IP helpers on the backup router (retain them only on primary) OR set the MECM WDS provider to single-threaded: `HKLM\\SOFTWARE\\Microsoft\\SMS\\DP SingleThreaded=1` (DWORD) and restart WDS. Single-threaded mode trades throughput for stability; large sites should fix the network instead. Inspect router configs for IP helper redundancy before rolling out PXE at scale.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/pxe-boot-causes-wds-crash",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/prepare-for-pxe-initiated-os-deployments"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "bits-http-403",
+    "scope": "CrossScope",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x8020002B" }
+        ]
+    },
+    "verdict": "BITS got HTTP 403 from the DP. The DP's IIS rejected the client's credentials, or the machine account has no rights on the content virtual directory.",
+    "evidence": [
+        { "component": "ContentTransferManager", "match": "403" },
+        { "component": "CAS", "match": "0x8020002B" }
+    ],
+    "fix": "On the DP, check the IIS authentication on `SMS_DP_SMSPKG$`: `Windows Authentication` must be enabled, `Anonymous Authentication` disabled. Confirm `Domain Computers` has `Read & Execute` on the `SMSPKG<drive>$` share and its backing folder. If the client is cross-forest, the DP must have the other forest's `Domain Computers` (or a specific group) granted access.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points",
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/security/fundamentals"
+    ]
+}

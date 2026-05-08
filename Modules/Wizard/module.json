@@ -1,0 +1,9 @@
+{
+    "Name": "Wizard",
+    "Title": "Wizard",
+    "Subtitle": "Author a new rule from the current triage.",
+    "Version": "1.0.0-placeholder",
+    "UI": "WPF",
+    "EntryScript": "Wizard.ps1",
+    "InitFunction": "New-LATWizardView"
+}

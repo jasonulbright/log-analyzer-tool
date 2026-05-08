@@ -1,0 +1,28 @@
+{
+    "id": "win11-24h2-update-gpo-blocks",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "smsts", "pattern": "(?i)Windows 11.*24H2" }
+        ],
+        "any": [
+            { "component": "smsts", "pattern": "(?i)Microsoft Update" },
+            { "component": "smsts", "pattern": "(?i)DoNotConnectToWindowsUpdateInternetLocations" }
+        ]
+    },
+    "verdict": "After a Win11 24H2 in-place upgrade, `Check online for updates from Microsoft Update` is hidden. The TS set a local GPO to prevent internet update contact, and the registry value persists after completion.",
+    "evidence": [
+        { "component": "smsts", "match": "24H2" },
+        { "component": "smsts", "match": "(?i)Microsoft Update" }
+    ],
+    "fix": "Add a final `Run Command Line` step at the end of the TS: `reg delete 'HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate' /v DoNotConnectToWindowsUpdateInternetLocations /f`. Or set the local GPO `Remove access to all Windows Update features` to `Not Configured` as the post-step. Test via `Get-ItemProperty 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate' DoNotConnectToWindowsUpdateInternetLocations` -- the value should not exist after TS completes.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/check-online-updates-unavailable",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/upgrade-windows-to-the-latest-version"
+    ]
+}

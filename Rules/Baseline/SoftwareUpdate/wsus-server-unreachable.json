@@ -1,0 +1,30 @@
+{
+    "id": "wsus-server-unreachable",
+    "scope": "SoftwareUpdate",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "WUA-002" }
+        ],
+        "none": [
+            { "signature": "DNS-001" }
+        ]
+    },
+    "causalOrder": [
+        { "signature": "WUA-002", "role": "root" }
+    ],
+    "verdict": "WSUS server is unreachable from the client. Update scans cannot run until connectivity is restored.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "WSUS" },
+        { "component": "WUAHandler", "match": "scan failed" }
+    ],
+    "fix": "On the SUP server, confirm IIS is running and the WsusPool application pool is started (it commonly stops on memory pressure). From the client, test `Invoke-WebRequest http://<SUP>:8530/SimpleAuthWebService/SimpleAuth.asmx` to verify HTTP 200. If the response is 503, recycle the WsusPool and raise its private memory limit to 0.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/sum/troubleshoot/software-update-point-issues",
+        "https://learn.microsoft.com/mem/configmgr/sum/get-started/install-a-software-update-point"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "app-script-unsigned",
+    "scope": "App",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x87D00327" }
+        ]
+    },
+    "verdict": "A deployment-type script is not signed, and the client's PowerShell execution policy requires signed scripts.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "not signed" },
+        { "component": "AppDiscovery", "match": "not signed" }
+    ],
+    "fix": "Either sign the script with a code-signing certificate that the clients trust (internal CA), or set `Client Settings / Computer Agent / PowerShell execution policy` to `Bypass` so MECM-originated scripts run regardless of the OS policy. Bypass is the house-standard for admin-authored scripts since MECM already gates what runs.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/about-client-settings",
+        "https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_execution_policies"
+    ]
+}

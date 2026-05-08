@@ -1,0 +1,23 @@
+{
+    "id": "wsus-pool-http-503",
+    "scope": "SoftwareUpdate",
+    "confidence": 88,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80244022" }
+        ]
+    },
+    "verdict": "HTTP 503 from WSUS. The `WsusPool` application pool on the SUP has stopped or is recycling under memory pressure.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80244022" }
+    ],
+    "fix": "On the SUP, `Import-Module WebAdministration; Get-WebAppPoolState -Name WsusPool`. If `Stopped`, `Start-WebAppPool -Name WsusPool`. Prevent recurrence by setting `Private Memory Limit` to 0 and `Queue Length` to 30000 on the WsusPool. If the pool stops again quickly, the WSUS content database is bloated - run `Invoke-WsusServerCleanup` with all switches, and shrink the SUSDB index rebuild job.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/sum/troubleshoot/software-update-point-issues",
+        "https://learn.microsoft.com/windows-server/administration/windows-server-update-services/manage/wsus-server-maintenance"
+    ]
+}

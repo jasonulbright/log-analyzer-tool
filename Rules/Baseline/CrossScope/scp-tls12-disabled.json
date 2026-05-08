@@ -1,0 +1,28 @@
+{
+    "id": "scp-tls12-disabled",
+    "scope": "CrossScope",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "DmpDownloader", "pattern": "(?i)(AdminUIContent|cab)" }
+        ],
+        "any": [
+            { "component": "DmpDownloader", "pattern": "(?i)timeout" },
+            { "component": "DmpDownloader", "pattern": "(?i)TLS" }
+        ]
+    },
+    "verdict": "Service connection point cannot download `ConfigMgr.AdminUIContent.cab` from the cloud. TLS 1.2 is not enabled for .NET Framework on the SCP host.",
+    "evidence": [
+        { "component": "DmpDownloader", "match": "(?i)Redirected to" },
+        { "component": "DmpDownloader", "match": "(?i)configmgrbits.azureedge" }
+    ],
+    "fix": "On the SCP, enable TLS 1.2 for .NET: set `HKLM\\SOFTWARE\\Microsoft\\.NETFramework\\v4.0.30319 SchUseStrongCrypto=1` (DWORD) and the Wow6432Node twin. Also set `SystemDefaultTlsVersions=1` at both locations. Reboot. Confirm outbound proxy exceptions allow `https://configmgrbits.azureedge.net` and `https://go.microsoft.com`. Consider upgrading the SCP host OS; Windows Server 2012 and earlier have weaker defaults.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/service-connection-tool-not-download-updates",
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/security/enable-tls-1-2"
+    ]
+}

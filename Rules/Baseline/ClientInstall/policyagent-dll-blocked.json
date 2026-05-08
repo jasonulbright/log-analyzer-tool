@@ -1,0 +1,28 @@
+{
+    "id": "policyagent-dll-blocked",
+    "scope": "ClientInstall",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "ccmsetup", "pattern": "PolicyAgentProvider\\.dll" }
+        ],
+        "any": [
+            { "component": "ccmsetup", "pattern": "problem starting" },
+            { "component": "ccmsetup", "pattern": "specified module could not be found" }
+        ]
+    },
+    "verdict": "ccmsetup failed loading `PolicyAgentProvider.dll`. The Windows `CWDIllegalInDllSearch` safe-DLL-search policy is set to `0xFFFFFFFF`, which blocks the DLL from loading during MSI custom actions.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "PolicyAgentProvider" },
+        { "component": "ccmsetup", "match": "problem starting" }
+    ],
+    "fix": "From an elevated prompt: `reg query HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session` Manager /v CWDIllegalInDllSearch`. If the value is `0xFFFFFFFF`, either delete the registry value or lower it (`0x00000002` is the Microsoft-recommended hardening value that does not break client.msi). Alternatively, add `C:\\Windows\\CCM` to the machine `PATH` environment variable so the loader finds the DLL without CWD search. Retry ccmsetup after the change.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/client-installation/client-installation-fails-with-policyagentprovider-dll",
+        "https://learn.microsoft.com/windows/win32/dlls/dynamic-link-library-search-order"
+    ]
+}

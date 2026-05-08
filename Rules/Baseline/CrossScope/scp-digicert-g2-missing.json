@@ -1,0 +1,27 @@
+{
+    "id": "scp-digicert-g2-missing",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "DmpDownloader", "pattern": "(?i)(cert|fail)" }
+        ],
+        "any": [
+            { "component": "DmpDownloader", "pattern": "(?i)digicert" },
+            { "component": "DmpDownloader", "pattern": "(?i)cloud" }
+        ]
+    },
+    "verdict": "Service connection point cannot upload or sync with MECM cloud services. The DigiCert Global Root G2 certificate is missing from the Trusted Root store, or automatic root certificate update is disabled in a disconnected environment.",
+    "evidence": [
+        { "component": "DmpDownloader", "match": "(?i)certificate" },
+        { "component": "DmpDownloader", "match": "(?i)fail" }
+    ],
+    "fix": "Install DigiCert Global Root G2 in `Cert:\\LocalMachine\\Root` on the SCP. For disconnected environments: download the cert from `https://cacerts.digicert.com/DigiCertGlobalRootG2.crt` on a connected host and import: `Import-Certificate -FilePath .\\DigiCertGlobalRootG2.crt -CertStoreLocation Cert:\\LocalMachine\\Root`. Verify the intermediate chain (DigiCert TLS Hybrid ECC SHA384 2020 CA1 or similar) is also present. Reboot the SCP so WinHTTP picks up the new chain.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/connectivity-issues-digicert-global-root-g2-not-installed"
+    ]
+}

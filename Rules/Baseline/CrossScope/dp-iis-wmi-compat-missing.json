@@ -1,0 +1,28 @@
+{
+    "id": "dp-iis-wmi-compat-missing",
+    "scope": "CrossScope",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80041013" }
+        ],
+        "any": [
+            { "component": "DistMgr", "pattern": "SSLPortList" },
+            { "component": "DistMgr", "pattern": "GetStr" }
+        ]
+    },
+    "verdict": "Content distribution to a DP failed because required IIS 6 WMI Compatibility components are missing on the DP. DistMgr cannot read DP config via WMI without them.",
+    "evidence": [
+        { "component": "DistMgr", "match": "0x80041013" },
+        { "component": "DistMgr", "match": "CWmiRegistry::GetStr" }
+    ],
+    "fix": "On the DP server, open `Server Manager -> Manage -> Add Roles and Features`. Under `Web Server (IIS) -> Management Tools -> IIS 6 Management Compatibility`, install `IIS 6 Metabase Compatibility` AND `IIS 6 WMI Compatibility`. Both are required. Restart `SMSExec` on the primary site server; content distribution will retry automatically.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/content-management/content-distribution-idispatch-error",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points"
+    ]
+}

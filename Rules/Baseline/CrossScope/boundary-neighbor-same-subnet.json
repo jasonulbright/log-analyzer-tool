@@ -1,0 +1,28 @@
+{
+    "id": "boundary-neighbor-same-subnet",
+    "scope": "CrossScope",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "LocationServices", "pattern": "(?i)boundary group" }
+        ],
+        "any": [
+            { "component": "LocationServices", "pattern": "(?i)neighbor" },
+            { "component": "LocationServices", "pattern": "(?i)unexpected DP" }
+        ]
+    },
+    "verdict": "Client is reaching a DP from a neighbor boundary group instead of its own. Happens when the neighbor DP shares an IP subnet with the client, even if the client's own boundary group DPs are healthy.",
+    "evidence": [
+        { "component": "LocationServices", "match": "(?i)boundary" },
+        { "component": "LocationServices", "match": "(?i)DP" }
+    ],
+    "fix": "Do not configure neighboring boundary groups that share IP subnets with the client's current boundary group. MECM's DP selection treats subnet-match as a strong signal and picks the subnet-local DP before respecting boundary-group hierarchy. Redesign the boundary groups so each subnet belongs to exactly one group, and fallback is to truly-remote DPs only.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/content-management/use-neighbor-boundary-group-dp",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/boundary-groups"
+    ]
+}

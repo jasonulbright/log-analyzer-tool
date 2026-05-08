@@ -1,0 +1,24 @@
+{
+    "id": "wu-file-not-found",
+    "scope": "SoftwareUpdate",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070002", "component": "WUAHandler" }
+        ]
+    },
+    "verdict": "Windows Update cannot find a required file. Missing or corrupt content in the SoftwareDistribution folder, or a partial previous update left the CBS store in an inconsistent state.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80070002" },
+        { "component": "UpdatesDeployment", "match": "0x80070002" }
+    ],
+    "fix": "From elevated PowerShell: `Stop-Service wuauserv,bits,cryptsvc,msiserver -Force; Rename-Item $env:windir\\SoftwareDistribution SoftwareDistribution.old -EA SilentlyContinue; Rename-Item $env:windir\\System32\\catroot2 catroot2.old -EA SilentlyContinue; Start-Service wuauserv,bits,cryptsvc,msiserver; sfc /scannow; DISM /Online /Cleanup-Image /RestoreHealth`. If the client is MECM-managed, also clear the CCM cache entry for the update content and force a policy refresh.",
+    "references": [
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-errors",
+        "https://learn.microsoft.com/troubleshoot/windows-client/installing-updates-features-roles/windows-update-issues-troubleshooting"
+    ]
+}

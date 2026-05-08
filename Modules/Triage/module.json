@@ -1,0 +1,9 @@
+{
+    "Name": "Triage",
+    "Title": "Triage",
+    "Subtitle": "Drop log bundles to analyze and produce a verdict.",
+    "Version": "1.0.0",
+    "UI": "WPF",
+    "EntryScript": "Triage.ps1",
+    "InitFunction": "New-LATTriageView"
+}

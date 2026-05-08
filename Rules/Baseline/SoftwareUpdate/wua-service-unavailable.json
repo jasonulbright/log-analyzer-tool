@@ -1,0 +1,23 @@
+{
+    "id": "wua-service-unavailable",
+    "scope": "SoftwareUpdate",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80240001" }
+        ]
+    },
+    "verdict": "Windows Update Agent (wuauserv) could not provide the service. Typically the service is stopped, disabled, or its data store is locked by another process.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80240001" }
+    ],
+    "fix": "Run: `Stop-Service wuauserv,bits,cryptsvc,msiserver -Force; Rename-Item %windir%\\SoftwareDistribution SoftwareDistribution.old; Rename-Item %windir%\\System32\\catroot2 catroot2.old; Start-Service wuauserv,bits,cryptsvc,msiserver; wuauclt.exe /resetauthorization /detectnow`. If the service will not start, inspect the System event log for `wuauserv` start errors and verify the service's dependencies (`RpcSs`, `DcomLaunch`) are running.",
+    "references": [
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-troubleshooting",
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-errors"
+    ]
+}

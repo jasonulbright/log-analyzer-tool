@@ -1,0 +1,24 @@
+{
+    "id": "pending-reboot-blocking",
+    "scope": "CrossScope",
+    "confidence": 88,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "REBOOT-001" }
+        ]
+    },
+    "verdict": "A pending reboot is blocking the operation. An earlier install or update is waiting on a restart before new installs can proceed.",
+    "evidence": [
+        { "match": "pending reboot" },
+        { "match": "restart required" }
+    ],
+    "fix": "Reboot the client. If a reboot has been pending for an extended period, investigate what originally required it (Windows Update, a previous app install) via: `Get-WinEvent -LogName System -MaxEvents 200 | Where-Object { $_.Id -in 1074,1076,6005,6006,6008 }` and the Component-Based Servicing event log. Clear the pending marker keys if they are stale and a reboot has already happened: `HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending` and `HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\PendingFileRenameOperations`.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/setupapi/pending-file-rename-operations",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

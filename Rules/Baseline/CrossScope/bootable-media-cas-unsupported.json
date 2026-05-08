@@ -1,0 +1,28 @@
+{
+    "id": "bootable-media-cas-unsupported",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "SMSProv", "pattern": "(?i)Failed to get MP installation directory" }
+        ],
+        "any": [
+            { "errorCode": "0x80004005", "component": "SMSProv" },
+            { "errorCode": "0x8004101D", "component": "SMSProv" }
+        ]
+    },
+    "verdict": "Creating bootable or prestaged media from the central administration site fails. The CAS cannot host an MP, and MECM now requires the SMS Provider to be co-located with an MP when building media.",
+    "evidence": [
+        { "component": "SMSProv", "match": "Failed to get MP installation directory" },
+        { "component": "SMSProv", "match": "0x80004005" }
+    ],
+    "fix": "Build the media from a primary site instead of the CAS. Also confirm every SMS Provider in the hierarchy is co-located with an MP (this is a requirement introduced in 2409+). If the CAS is your only site today, the cleanest fix is to promote a primary; otherwise run the media builder from the primary `Administration -> Site Configuration -> Sites` context.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/cannot-create-bootable-media-error-80004005-0x8004101d",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/create-bootable-media"
+    ]
+}

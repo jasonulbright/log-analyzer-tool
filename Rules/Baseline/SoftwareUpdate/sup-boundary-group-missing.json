@@ -1,0 +1,28 @@
+{
+    "id": "sup-boundary-group-missing",
+    "scope": "SoftwareUpdate",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "WUAHandler", "pattern": "(?i)(SUP|update source)" }
+        ],
+        "any": [
+            { "component": "LocationServices", "pattern": "(?i)fallback" },
+            { "component": "WUAHandler", "pattern": "(?i)No WSUS Server" }
+        ]
+    },
+    "verdict": "Clients are not receiving software updates because no SUP is reachable through their boundary group. Starting in MECM 1702, clients select SUPs the same way they select DPs -- via boundary group membership.",
+    "evidence": [
+        { "component": "LocationServices", "match": "(?i)SUP" },
+        { "component": "WUAHandler", "match": "(?i)No WSUS Server" }
+    ],
+    "fix": "In the console, add the SUP to the client's boundary group (`Administration -> Hierarchy Configuration -> Boundary Groups -> <group> -> References -> Add`). Multiple SUPs per boundary group are supported; clients load-balance across them. For a quick emergency workaround, enable `Fallback` on the boundary group to let clients reach a SUP in a neighboring group.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/clients-not-get-software-updates",
+        "https://learn.microsoft.com/mem/configmgr/sum/plan-design/plan-for-software-updates"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "wsus-connection-failed",
+    "scope": "SoftwareUpdate",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "WUA-002" }
+        ]
+    },
+    "verdict": "Client could not connect to the WSUS server. Server may be down, the WsusPool app pool may be recycling, or network/firewall is blocking the port.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "WSUS" },
+        { "component": "WUAHandler", "match": "connect" }
+    ],
+    "fix": "On the SUP server, verify IIS is running and `WsusPool` is started (it stops on memory-limit hits; raise `Private Memory Limit` to 0 to disable the cap). From the client, run `Test-NetConnection <sup-fqdn> -Port 8530` (or 8531 for HTTPS). If the pool is healthy but the client still fails, capture ETL or Fiddler to see the actual HTTP response.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/sum/troubleshoot/software-update-point-issues",
+        "https://learn.microsoft.com/mem/configmgr/sum/get-started/install-a-software-update-point"
+    ]
+}

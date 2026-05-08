@@ -1,0 +1,188 @@
+<Controls:MetroWindow
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:Controls="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro"
+    Title="Capture as rule"
+    Width="820" Height="680"
+    MinWidth="720" MinHeight="560"
+    WindowStartupLocation="CenterOwner"
+    TitleCharacterCasing="Normal"
+    ShowIconOnTitleBar="False"
+    ResizeMode="CanResize"
+    GlowBrush="{DynamicResource MahApps.Brushes.Accent}"
+    BorderThickness="1">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Dark.Steel.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- Button row (bottom) -->
+        <!--
+            Save and Export-patch are NON-TERMINAL.  They do their thing,
+            surface a status line inline, and leave the dialog open so
+            the author can keep editing and save again, or submit a patch
+            on the same draft, without losing state.  Close is the only
+            exit; its label flips to "Close" once any persistent action
+            has fired (there is no unsaved work to warn about), "Cancel"
+            otherwise.  Authors converting SharePoint KB articles work
+            like this: edit, Save, keep editing, Save again, Close.
+        -->
+        <DockPanel DockPanel.Dock="Bottom" LastChildFill="False"
+                   Margin="0,0,0,0">
+            <Border DockPanel.Dock="Top"
+                    BorderBrush="{DynamicResource MahApps.Brushes.Gray8}"
+                    BorderThickness="0,1,0,0"
+                    Padding="20,8,20,8"
+                    Background="{DynamicResource MahApps.Brushes.Gray10}">
+                <TextBlock x:Name="txtDialogStatus"
+                           FontSize="11"
+                           FontFamily="Cascadia Code, Consolas, Courier New"
+                           Foreground="{DynamicResource MahApps.Brushes.Gray1}"
+                           TextWrapping="Wrap"
+                           Text="Edit the fields above.  Save persists to your local overlay; Export patch writes a diff for upstream submission.  Close exits.  Save / Export can be used repeatedly on the same draft."/>
+            </Border>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="20,12,20,12"
+                        DockPanel.Dock="Top">
+                <Button x:Name="btnPreview"
+                        Content="Preview" MinWidth="100" Height="32" Margin="0,0,8,0"
+                        Style="{DynamicResource MahApps.Styles.Button.Square}"
+                        Controls:ControlsHelper.ContentCharacterCasing="Normal"
+                        ToolTip="Run the draft against the current incident plus stored incidents. Does not save anything."/>
+                <Button x:Name="btnSave"
+                        Content="Save" MinWidth="100" Height="32" Margin="0,0,8,0" IsDefault="True"
+                        Style="{DynamicResource MahApps.Styles.Button.Square.Accent}"
+                        Controls:ControlsHelper.ContentCharacterCasing="Normal"
+                        ToolTip="Write the draft to %LOCALAPPDATA%\LogAnalyzer\rules as a USER rule. Dialog stays open."/>
+                <Button x:Name="btnSubmit"
+                        Content="Export patch" MinWidth="120" Height="32" Margin="0,0,8,0"
+                        Style="{DynamicResource MahApps.Styles.Button.Square}"
+                        Controls:ControlsHelper.ContentCharacterCasing="Normal"
+                        ToolTip="Write a git-applicable diff for upstream contribution to Rules/Baseline. Does not install the rule locally; use Save for that. Dialog stays open."/>
+                <Button x:Name="btnCancel"
+                        Content="Cancel" MinWidth="100" Height="32" IsCancel="True"
+                        Style="{DynamicResource MahApps.Styles.Button.Square}"
+                        Controls:ControlsHelper.ContentCharacterCasing="Normal"
+                        ToolTip="Close without saving.  Flips to Close once a Save or Export has fired."/>
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Form + preview body -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="20,16,20,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>  <!-- id row -->
+                    <RowDefinition Height="Auto"/>  <!-- scope + confidence row -->
+                    <RowDefinition Height="Auto"/>  <!-- verdict label -->
+                    <RowDefinition Height="Auto"/>  <!-- verdict box -->
+                    <RowDefinition Height="Auto"/>  <!-- fix label -->
+                    <RowDefinition Height="Auto"/>  <!-- fix box -->
+                    <RowDefinition Height="Auto"/>  <!-- evidence label -->
+                    <RowDefinition Height="Auto"/>  <!-- evidence list -->
+                    <RowDefinition Height="Auto"/>  <!-- preview label -->
+                    <RowDefinition Height="Auto"/>  <!-- preview box -->
+                </Grid.RowDefinitions>
+
+                <!-- Row 0: ID readout -->
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Rule ID"
+                               VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource MahApps.Brushes.Gray3}"/>
+                    <TextBox x:Name="txtRuleId"
+                             Grid.Column="1" IsReadOnly="True" FontFamily="Cascadia Code, Consolas, Courier New"
+                             FontSize="12"
+                             Style="{DynamicResource MahApps.Styles.TextBox}"/>
+                </Grid>
+
+                <!-- Row 1: scope + confidence -->
+                <Grid Grid.Row="1" Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110"/>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="40"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Scope"
+                               VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource MahApps.Brushes.Gray3}"/>
+                    <ComboBox x:Name="cmbScope"
+                              Grid.Column="1"
+                              Style="{DynamicResource MahApps.Styles.ComboBox}"/>
+                    <TextBlock Grid.Column="3" Text="Confidence"
+                               VerticalAlignment="Center" FontSize="13" FontWeight="SemiBold"
+                               Foreground="{DynamicResource MahApps.Brushes.Gray3}"/>
+                    <Slider x:Name="sldConfidence"
+                            Grid.Column="4" Minimum="0" Maximum="100" TickFrequency="5"
+                            IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                            Style="{DynamicResource MahApps.Styles.Slider}"/>
+                    <TextBlock x:Name="txtConfidenceReadout"
+                               Grid.Column="5" VerticalAlignment="Center" HorizontalAlignment="Right"
+                               FontFamily="Cascadia Code, Consolas, Courier New" FontSize="13" Text="70"/>
+                </Grid>
+
+                <!-- Row 2+3: verdict -->
+                <TextBlock Grid.Row="2" Text="Verdict (plain-English root cause)"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource MahApps.Brushes.Gray3}"
+                           Margin="0,0,0,4"/>
+                <TextBox x:Name="txtVerdict" Grid.Row="3"
+                         MinHeight="62" MaxHeight="120"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         Margin="0,0,0,12" FontSize="13"
+                         Style="{DynamicResource MahApps.Styles.TextBox}"/>
+
+                <!-- Row 4+5: fix -->
+                <TextBlock Grid.Row="4" Text="Fix (remediation steps for a responder)"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource MahApps.Brushes.Gray3}"
+                           Margin="0,0,0,4"/>
+                <TextBox x:Name="txtFix" Grid.Row="5"
+                         MinHeight="62" MaxHeight="120"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         Margin="0,0,0,12" FontSize="13"
+                         Style="{DynamicResource MahApps.Styles.TextBox}"/>
+
+                <!-- Row 6+7: evidence (populated programmatically) -->
+                <TextBlock Grid.Row="6" Text="Evidence (2-3 lines that best show the cause)"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource MahApps.Brushes.Gray3}"
+                           Margin="0,0,0,4"/>
+                <Border Grid.Row="7" BorderBrush="{DynamicResource MahApps.Brushes.Gray8}"
+                        BorderThickness="1" Padding="6" Margin="0,0,0,12">
+                    <StackPanel x:Name="pnlEvidence"/>
+                </Border>
+
+                <!-- Row 8+9: preview -->
+                <TextBlock Grid.Row="8" Text="Preview"
+                           FontSize="13" FontWeight="SemiBold"
+                           Foreground="{DynamicResource MahApps.Brushes.Gray3}"
+                           Margin="0,0,0,4"/>
+                <TextBox x:Name="txtPreview" Grid.Row="9"
+                         MinHeight="100" MaxHeight="180"
+                         IsReadOnly="True" AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         FontFamily="Cascadia Code, Consolas, Courier New" FontSize="12"
+                         Text="Click Preview to run the draft against the current incident plus stored incidents."
+                         Style="{DynamicResource MahApps.Styles.TextBox}"/>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Controls:MetroWindow>

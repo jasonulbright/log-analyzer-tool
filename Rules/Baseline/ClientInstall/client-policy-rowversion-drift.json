@@ -1,0 +1,28 @@
+{
+    "id": "client-policy-rowversion-drift",
+    "scope": "ClientInstall",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "PolicyAgent", "pattern": "(?i)(policy|assignment)" }
+        ],
+        "any": [
+            { "component": "PolicyAgent", "pattern": "(?i)row.?version" },
+            { "component": "PolicyPV", "pattern": "(?i)(no new|no policy)" }
+        ]
+    },
+    "verdict": "Clients stop receiving policy after a site SQL recovery. The `Last Row Version` registry entry on the Policy Provider is higher than the `rowversion` in the recovered site DB, so the provider sees no 'new' rows.",
+    "evidence": [
+        { "component": "PolicyAgent", "match": "(?i)policy" },
+        { "component": "PolicyPV", "match": "(?i)row" }
+    ],
+    "fix": "On the primary site server: `Stop-Service SMS_Executive,SiteComp -Force`. Against the recovered DB: `SELECT MIN(rowversion) FROM CI_CIAssignments`. Write that value to `HKLM\\SOFTWARE\\Microsoft\\SMS\\Components\\SMS_POLICY_PROVIDER Last Row Version` (REG_SZ) on the site server. Do the same for `SMS_OBJECT_REPLICATION_MANAGER`. Restart the two services. Clients get policy again on next cycle.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/client-management/clients-not-receive-policy-data",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/manage/recover-sites"
+    ]
+}

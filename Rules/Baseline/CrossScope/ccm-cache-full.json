@@ -1,0 +1,24 @@
+{
+    "id": "ccm-cache-full",
+    "scope": "CrossScope",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CACHE-001" }
+        ]
+    },
+    "verdict": "The CCM client cache does not have enough free space for the requested content.",
+    "evidence": [
+        { "component": "CAS", "match": "cache" },
+        { "component": "ContentTransferManager", "match": "space" }
+    ],
+    "fix": "Raise the CCM cache size via client settings (`Compliance Settings / Client Cache Settings`) so it is larger than the biggest single-package content delivered to this collection. Alternately clear stale cache: `Invoke-CimMethod -Namespace root\\ccm\\softmgmtagent -ClassName CacheInfoEx -MethodName DeleteCacheInfoEx -Arguments @{ CacheContentID = '<contentID>' }` or use the `Cache` tab on the Configuration Manager control panel applet.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/about-client-settings"
+    ]
+}

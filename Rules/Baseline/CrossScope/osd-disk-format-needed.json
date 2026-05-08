@@ -1,0 +1,24 @@
+{
+    "id": "osd-disk-format-needed",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x800700A1" }
+        ]
+    },
+    "verdict": "Task sequence hit an unformatted disk or a legacy-MBR layout where GPT is expected. The `Format and Partition Disk` step could not proceed with the current layout.",
+    "evidence": [
+        { "match": "0x800700A1" },
+        { "match": "diskpart" }
+    ],
+    "fix": "Add a `Run Command Line` step before `Format and Partition Disk` that runs `diskpart /s X:\\scripts\\clean.txt` with this content: `select disk 0`, `clean`, `convert gpt`, `create partition efi size=260`, `format fs=fat32 quick`, `create partition msr size=16`, `create partition primary`, `format fs=ntfs quick`, `exit`. This forces a clean GPT layout. Required when hardware flipped from BIOS/MBR to UEFI/GPT mid-lifecycle or when the previous OS left a protective MBR.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/osd/understand/task-sequence-steps",
+        "https://learn.microsoft.com/windows-hardware/manufacture/desktop/configure-uefigpt-based-hard-drive-partitions"
+    ]
+}

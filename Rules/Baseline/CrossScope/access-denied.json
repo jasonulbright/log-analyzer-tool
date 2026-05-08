@@ -1,0 +1,24 @@
+{
+    "id": "access-denied",
+    "scope": "CrossScope",
+    "confidence": 70,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "ACCESS-001" }
+        ]
+    },
+    "verdict": "An access-denied error was observed. The MECM client or the machine account lacks the permission for the operation.",
+    "evidence": [
+        { "component": "", "match": "access denied" },
+        { "component": "", "match": "0x80070005" }
+    ],
+    "fix": "Identify the resource from the log line: `file`, `registry`, `WMI namespace`, or `share`. For content: confirm the machine account has `Read` on the content source path and the DP is healthy. For WMI: `Get-CimInstance -Namespace root\\ccm -ClassName __Namespace` should succeed as SYSTEM; if not, repair the CCM WMI namespace via `ccmsetup.exe /forceinstall`. For domain-join drift (machine account invalid), re-join the client.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/debug/system-error-codes",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

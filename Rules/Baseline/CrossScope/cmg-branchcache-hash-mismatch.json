@@ -1,0 +1,28 @@
+{
+    "id": "cmg-branchcache-hash-mismatch",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "PkgXferMgr", "pattern": "(?i)Contentinfo\\.tar" }
+        ],
+        "any": [
+            { "component": "PkgXferMgr", "pattern": "(?i)hash.*mismatch" },
+            { "component": "PkgXferMgr", "pattern": "(?i)BranchCache" }
+        ]
+    },
+    "verdict": "Cloud DP content distribution fails with a hash mismatch on `Contentinfo.tar`. The BranchCache publication key is different across primary sites in the hierarchy, so each site produces a different hash for the same file.",
+    "evidence": [
+        { "component": "PkgXferMgr", "match": "Contentinfo.tar" },
+        { "component": "PkgXferMgr", "match": "hash" }
+    ],
+    "fix": "Synchronize the BranchCache key across all primary sites. On the CAS: `SELECT Value1 FROM SC_Properties WHERE Name = 'BranchCacheKey'`. On each primary site, run: `netsh branchcache set key passphrase='<cas-value>'`. Redistribute affected packages. This only applies when multiple primary sites publish to the same cloud DP.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/content-management/hash-mismatch-error-download-contentinfo-tar",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-cloud-based-distribution-points-in-azure"
+    ]
+}

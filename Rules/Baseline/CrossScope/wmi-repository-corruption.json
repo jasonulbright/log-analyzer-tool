@@ -1,0 +1,33 @@
+{
+    "id": "wmi-repository-corruption",
+    "scope": "CrossScope",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "WMI-001" }
+        ],
+        "any": [
+            { "errorCode": "0x80041002" },
+            { "errorCode": "0x80041008" },
+            { "errorCode": "0x80041013" }
+        ]
+    },
+    "causalOrder": [
+        { "signature": "WMI-001", "role": "root" },
+        { "errorCode": "0x80041002", "role": "symptom" }
+    ],
+    "verdict": "WMI repository corruption. Many MECM client functions depend on a healthy WMI repository, so the failure surfaces across multiple components at once.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "WMI" },
+        { "component": "CcmExec", "match": "provider" }
+    ],
+    "fix": "Run `winmgmt /verifyrepository` on the client. If inconsistent, attempt `winmgmt /salvagerepository` first. Use `/resetrepository` only as a last resort: a reset destroys the CCM namespace and requires a full client reinstall via ccmsetup.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/windows-server/system-management-components/rebuild-wmi-repository",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

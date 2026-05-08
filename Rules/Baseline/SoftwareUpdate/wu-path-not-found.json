@@ -1,0 +1,24 @@
+{
+    "id": "wu-path-not-found",
+    "scope": "SoftwareUpdate",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070003", "component": "WUAHandler" }
+        ]
+    },
+    "verdict": "Windows Update install path does not exist. Same family as 0x80070002 but points to a missing directory, often from an interrupted cumulative update install.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80070003" },
+        { "component": "UpdatesDeployment", "match": "path" }
+    ],
+    "fix": "Run `DISM /Online /Cleanup-Image /StartComponentCleanup` followed by `DISM /Online /Cleanup-Image /RestoreHealth`. If the client is stuck in `Install Pending`, confirm the last reboot actually completed (`(Get-CimInstance Win32_OperatingSystem).LastBootUpTime`) before clearing `HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Component Based Servicing\\RebootPending`. Retry the scan after services restart.",
+    "references": [
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-errors",
+        "https://learn.microsoft.com/windows-hardware/manufacture/desktop/what-is-dism"
+    ]
+}

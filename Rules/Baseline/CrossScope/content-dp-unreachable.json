@@ -1,0 +1,24 @@
+{
+    "id": "content-dp-unreachable",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "DP-001" }
+        ]
+    },
+    "verdict": "Client could not locate a distribution point that hosts the requested content. Either no DP in the client's boundary group has the content, or all candidate DPs are offline.",
+    "evidence": [
+        { "component": "LocationServices", "match": "DP" },
+        { "component": "LocationServices", "match": "location" }
+    ],
+    "fix": "Confirm the client's boundary via `Get-CCMBoundary` (or look at the value of `SMSCFG.INI` / the `ClientLocation.log`). In the console, verify the client's boundary group is linked to at least one DP that holds the content. If boundaries are correct but no DP was returned, restart `CCMExec` on the client to force a location lookup refresh.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/boundary-groups",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points"
+    ]
+}

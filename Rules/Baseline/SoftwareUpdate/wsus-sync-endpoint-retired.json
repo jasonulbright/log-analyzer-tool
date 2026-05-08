@@ -1,0 +1,28 @@
+{
+    "id": "wsus-sync-endpoint-retired",
+    "scope": "SoftwareUpdate",
+    "confidence": 92,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "WSUS", "pattern": "(?i)SoapException" }
+        ],
+        "any": [
+            { "component": "WSUS", "pattern": "(?i)fe2\\.update\\.microsoft" },
+            { "component": "SoftwareDistribution", "pattern": "(?i)SoapException" }
+        ]
+    },
+    "verdict": "WSUS synchronization fails with `SoapException`. The WSUS server is still pointed at the retired endpoint `https://fe2.update.microsoft.com/v6`. Microsoft decommissioned this endpoint; only `https://sws.update.microsoft.com` still answers.",
+    "evidence": [
+        { "component": "WSUS", "match": "SoapException" },
+        { "component": "WSUS", "match": "fe2.update.microsoft.com" }
+    ],
+    "fix": "On the topmost WSUS server (root of the WSUS hierarchy), close all WSUS consoles. From elevated PowerShell: `[reflection.assembly]::LoadWithPartialName(\"Microsoft.UpdateServices.Administration\") | Out-Null; $wsus = [Microsoft.UpdateServices.Administration.AdminProxy]::GetUpdateServer(); $cfg = $wsus.GetConfiguration(); $cfg.SyncFromMicrosoftUpdate = $true; $cfg.Save()`. Then trigger sync. If this is an upstream-downstream hierarchy, downstream servers inherit the new endpoint automatically.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/wsus-synchronization-fails-with-soapexception",
+        "https://learn.microsoft.com/windows-server/administration/windows-server-update-services/deploy/about-the-wsus-server"
+    ]
+}

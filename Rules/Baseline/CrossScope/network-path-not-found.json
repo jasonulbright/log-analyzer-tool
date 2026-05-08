@@ -1,0 +1,24 @@
+{
+    "id": "network-path-not-found",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070035" }
+        ]
+    },
+    "verdict": "A UNC path could not be resolved. DNS or WINS cannot find the server, or SMB is not answering on the target.",
+    "evidence": [
+        { "component": "CAS", "match": "0x80070035" },
+        { "component": "ContentTransferManager", "match": "network path" }
+    ],
+    "fix": "Parse the failing UNC from the log line (`\\\\<server>\\...`). Test name resolution: `Resolve-DnsName <server>`. Test SMB: `Test-NetConnection <server> -Port 445`. If DNS resolves but SMB is refused, check firewall between the client and the server (Private/Domain profile). For cross-forest shares, confirm SMB signing is mutually supported; Windows 11 24H2 enforces signing more strictly.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/windows-server/networking/network-path-not-found-error",
+        "https://learn.microsoft.com/windows-server/storage/file-server/troubleshoot/windows-smb-issue-troubleshooting"
+    ]
+}

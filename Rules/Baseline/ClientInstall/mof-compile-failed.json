@@ -1,0 +1,24 @@
+{
+    "id": "mof-compile-failed",
+    "scope": "ClientInstall",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CCM-003" }
+        ]
+    },
+    "verdict": "Microsoft Policy Platform MOF compilation failed. This almost always indicates an underlying WMI repository issue on the client.",
+    "evidence": [
+        { "component": "MicrosoftPolicyPlatformSetup.msi", "match": "MOF" },
+        { "component": "ccmsetup", "match": "policy platform" }
+    ],
+    "fix": "Repair WMI before retrying the client install: run `winmgmt /verifyrepository`. If inconsistent, try `winmgmt /salvagerepository`; if salvage does not resolve it, `winmgmt /resetrepository` is the last-resort fix (destroys the CCM namespace, so follow with `ccmsetup.exe /forceinstall`). Check WBEM event log entries under `Applications and Services Logs / Microsoft / Windows / WMI-Activity / Operational` for the specific MOF file that failed.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/windows-server/system-management-components/rebuild-wmi-repository",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

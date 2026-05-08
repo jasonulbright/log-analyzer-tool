@@ -1,0 +1,28 @@
+{
+    "id": "wsus-console-cache-corrupt",
+    "scope": "SoftwareUpdate",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "WSUS", "pattern": "(?i)console" }
+        ],
+        "any": [
+            { "component": "WSUS", "pattern": "(?i)Event ID.*7053" },
+            { "component": "WSUS", "pattern": "(?i)application cache" }
+        ]
+    },
+    "verdict": "WSUS MMC console crashes browsing updates. The per-user MMC application cache is corrupt, typically after an unclean WSUS cumulative update install.",
+    "evidence": [
+        { "component": "WSUS", "match": "7053" },
+        { "component": "WSUS", "match": "(?i)unexpected error" }
+    ],
+    "fix": "Close the WSUS console. Delete `%appdata%\\Microsoft\\MMC\\wsus.msc` for the affected user. Reopen the console; the cache rebuilds on first use. If multiple administrators are affected, push the delete via a per-user scheduled task or document the workaround in the admin runbook.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/wsus-console-crashes",
+        "https://learn.microsoft.com/windows-server/administration/windows-server-update-services/manage/wsus-server-maintenance"
+    ]
+}

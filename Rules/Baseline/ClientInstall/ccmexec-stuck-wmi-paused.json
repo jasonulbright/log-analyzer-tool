@@ -1,0 +1,28 @@
+{
+    "id": "ccmexec-stuck-wmi-paused",
+    "scope": "ClientInstall",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "CcmExec", "pattern": "WMI" }
+        ],
+        "any": [
+            { "component": "CcmExec", "pattern": "paused" },
+            { "component": "CcmExec", "pattern": "not responding" }
+        ]
+    },
+    "verdict": "SMS Agent Host (`CcmExec`) went non-functional after the Windows Management Instrumentation service was paused. WMI cancels pending callers on pause and does not re-establish them on resume, leaving CcmExec hung.",
+    "evidence": [
+        { "component": "CcmExec", "match": "WMI" },
+        { "component": "CcmExec", "match": "paused" }
+    ],
+    "fix": "Immediate: `Restart-Service CcmExec -Force`. The MECM client health check will also detect and restart the service on its next cycle (default 60 min). Long-term: avoid pausing `winmgmt`. If a monitoring agent or hardening script is pausing WMI, refactor it to stop/start instead, or exclude CcmExec from the pause-restart cycle.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/client-management/sms-agent-host-not-automatically-restarted",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

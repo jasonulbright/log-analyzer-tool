@@ -1,0 +1,28 @@
+{
+    "id": "osd-ts-stops-wmf51-migration",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "smsts", "pattern": "(?i)in.?place upgrade" }
+        ],
+        "any": [
+            { "component": "smsts", "pattern": "(?i)WMIMigrationPlugin" },
+            { "component": "smsts", "pattern": "(?i)WMF 5\\.1" }
+        ]
+    },
+    "verdict": "Windows 10 in-place upgrade TS stops after the OS upgrade completes. WMF 5.1 was installed on the source Win7/8.1 AFTER the final cumulative update, leaving a Win10-incompatible `WMIMigrationPlugin.dll` in place.",
+    "evidence": [
+        { "component": "smsts", "match": "in-place upgrade" },
+        { "component": "smsts", "match": "WMIMigrationPlugin" }
+    ],
+    "fix": "On the source image, install the latest Windows 7 or 8.1 cumulative update AFTER installing WMF 5.1. The CU ships the Win7-compatible `WMIMigrationPlugin.dll` and corrects the migration metadata. Alternately, uninstall WMF 5.1 before upgrade if WMF is not required in-flight. In most modern environments, Win7/8.1 sources are rare; this rule fires mostly on legacy OS migration projects.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/task-sequence-stops-after-in-place-upgrade",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/upgrade-windows-to-the-latest-version"
+    ]
+}

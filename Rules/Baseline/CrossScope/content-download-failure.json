@@ -1,0 +1,24 @@
+{
+    "id": "content-download-failure",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "DP-003" }
+        ]
+    },
+    "verdict": "Content was located on a DP but the download itself failed. Most common causes: BITS issues, network interruption, proxy interference, or DP IIS misconfiguration.",
+    "evidence": [
+        { "component": "ContentTransferManager", "match": "download" },
+        { "component": "DataTransferService", "match": "error" }
+    ],
+    "fix": "On the client, check BITS: `Get-Service BITS | Restart-Service`; inspect stuck jobs with `Get-BitsTransfer -AllUsers`. On the DP, verify IIS is serving the content virtual directories (`SMS_DP_SMSPKG$`, `SMS_DP_SMSSIG$`) and that `BITS Uploads` is enabled on the `WebDAV Publishing` feature where content is hosted. If a proxy sits between client and DP, confirm it passes large ranged-byte GET requests.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points",
+        "https://learn.microsoft.com/windows/win32/bits/background-intelligent-transfer-service-portal"
+    ]
+}

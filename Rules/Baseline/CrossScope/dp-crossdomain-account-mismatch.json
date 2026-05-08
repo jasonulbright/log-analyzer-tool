@@ -1,0 +1,28 @@
+{
+    "id": "dp-crossdomain-account-mismatch",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x8007052E" }
+        ],
+        "any": [
+            { "component": "DistMgr", "pattern": "(?i)remote content library" },
+            { "component": "DistMgr", "pattern": "(?i)site system" }
+        ]
+    },
+    "verdict": "Cannot distribute packages to a remote DP in an untrusted domain. MECM uses the Site System Installation Account (not the content library account) to reach the library, and that account cannot authenticate across the trust.",
+    "evidence": [
+        { "component": "DistMgr", "match": "0x8007052E" },
+        { "component": "DistMgr", "match": "(?i)content library" }
+    ],
+    "fix": "Pass-through trick: on the server that hosts the remote content library, create a local account whose username AND password match the Site System Installation Account configured for the remote DP. Grant the local account read access to the content library folder. MECM then authenticates via pass-through (same username/password = same NT hash) even without a formal trust. Long-term, converge DPs into the primary site's forest if possible.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/content-management/package-distribution-to-remote-dp-fails",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points"
+    ]
+}

@@ -1,0 +1,23 @@
+{
+    "id": "app-msi-service-unavailable",
+    "scope": "App",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1601", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "Windows Installer service (`msiserver`) is unavailable. No MSI-based install can run on this client until the service is restored.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1601" }
+    ],
+    "fix": "Check the service: `Get-Service msiserver`. If stopped, `Start-Service msiserver`. If it refuses to start, try `msiexec /unregister` then `msiexec /regserver` from an elevated prompt. If that fails, the WMI repository or Windows Installer core is damaged: verify with `winmgmt /verifyrepository`.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/msi/error-codes",
+        "https://learn.microsoft.com/troubleshoot/windows-server/application-management/windows-installer-service-could-not-be-accessed"
+    ]
+}

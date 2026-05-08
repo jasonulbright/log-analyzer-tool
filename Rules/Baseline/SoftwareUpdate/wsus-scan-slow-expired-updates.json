@@ -1,0 +1,28 @@
+{
+    "id": "wsus-scan-slow-expired-updates",
+    "scope": "SoftwareUpdate",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "WUAHandler", "pattern": "(?i)scan" }
+        ],
+        "any": [
+            { "component": "WUAHandler", "pattern": "(?i)(long|slow|hours)" },
+            { "component": "WindowsUpdate", "pattern": "(?i)expired" }
+        ]
+    },
+    "verdict": "WSUS client scan is taking hours instead of minutes. Expired definition updates and malware-cleanup revisions have not been declined on the WSUS/SUP server, bloating the update metadata the client must evaluate.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "(?i)scan" },
+        { "component": "WUAHandler", "match": "(?i)took" }
+    ],
+    "fix": "On the WSUS server, open the WSUS console -> `Options -> Automatic Approvals -> Advanced`. Enable `Automatically approve new revisions of approved updates` and `Automatically decline updates when a new revision causes them to expire`. Then run the WSUS server cleanup wizard (or `Invoke-WsusServerCleanup -DeclineExpiredUpdates -DeclineSupersededUpdates -CleanupUnneededContentFiles`) to clear the existing bloat. Re-index SUSDB after cleanup.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/wsus-client-long-time-finish-update-scan",
+        "https://learn.microsoft.com/windows-server/administration/windows-server-update-services/manage/wsus-server-maintenance"
+    ]
+}

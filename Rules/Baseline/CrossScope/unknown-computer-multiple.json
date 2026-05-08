@@ -1,0 +1,28 @@
+{
+    "id": "unknown-computer-multiple",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "smsts", "pattern": "(?i)MPLOCATION" }
+        ],
+        "any": [
+            { "component": "smsts", "pattern": "(?i)Unknown Computer" },
+            { "component": "smsts", "pattern": "(?i)multiple.*management point" }
+        ]
+    },
+    "verdict": "Dynamic media TS cannot retrieve an MP location. The site has multiple Unknown Computer objects per architecture, so the MPLOCATION call returns an ambiguous multi-result set the TS engine refuses to consume.",
+    "evidence": [
+        { "component": "smsts", "match": "MPLOCATION" },
+        { "component": "smsts", "match": "(?i)Unknown Computer" }
+    ],
+    "fix": "A site should have exactly one x64 and one x86 Unknown Computer object. Remove duplicates via SQL: `SELECT ItemKey, Name0 FROM System_DISC WHERE Name0 LIKE '%Unknown%' ORDER BY ItemKey`. Leave one of each architecture (the lowest ItemKey is typically the original). Drop duplicates via the console Asset and Compliance workspace; manual DB deletes are unsupported and can corrupt the replication graph.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/dynamic-media-cannot-get-mp-locations",
+        "https://learn.microsoft.com/mem/configmgr/osd/get-started/prepare-for-operating-system-deployment"
+    ]
+}

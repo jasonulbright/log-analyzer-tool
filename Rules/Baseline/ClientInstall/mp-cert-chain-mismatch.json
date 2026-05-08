@@ -1,0 +1,32 @@
+{
+    "id": "mp-cert-chain-mismatch",
+    "scope": "ClientInstall",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CCM-001" },
+            { "signature": "CERT-001" }
+        ],
+        "none": [
+            { "signature": "DNS-001" }
+        ]
+    },
+    "causalOrder": [
+        { "signature": "CERT-001", "role": "root" },
+        { "signature": "CCM-001", "role": "symptom" }
+    ],
+    "verdict": "Management point certificate chain mismatch. The client rejects the MP HTTPS certificate so ccmsetup cannot reach the MP.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "Failed to verify the authenticity" },
+        { "component": "ClientIDManagerStartup", "match": "certificate" }
+    ],
+    "fix": "Push the MP issuing CA root certificate to clients via GPO, or re-issue the MP certificate from a CA the clients already trust. Verify with `certutil -verify -urlfetch <MP-cert.cer>` from the affected client.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/security/fundamentals",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/deploy-clients-to-windows-computers"
+    ]
+}

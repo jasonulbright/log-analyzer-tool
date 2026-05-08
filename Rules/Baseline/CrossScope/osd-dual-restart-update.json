@@ -1,0 +1,28 @@
+{
+    "id": "osd-dual-restart-update",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "smsts", "pattern": "(?i)install software updates" }
+        ],
+        "any": [
+            { "component": "smsts", "pattern": "(?i)fail" },
+            { "component": "smsts", "pattern": "(?i)reboot" }
+        ]
+    },
+    "verdict": "Task sequence failed in `Install Software Updates`. A specific update requested a second reboot that the TS controller did not orchestrate. CBS / servicing-stack updates that dual-restart are the usual culprit.",
+    "evidence": [
+        { "component": "smsts", "match": "Install Software Updates" },
+        { "component": "smsts", "match": "reboot" }
+    ],
+    "fix": "Do not install SSUs or servicing-stack updates through OSD. Install them via regular software updates before the TS runs, or split them into their own deployment outside the TS. Known dual-restart updates: `KB3126446`, `KB3096053`, any monthly SSU. Add the KBs to an exclusion list on the TS `Install Software Updates` step; install them separately from the OSD flow.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/task-sequence-fails-multiple-restarts",
+        "https://learn.microsoft.com/mem/configmgr/sum/deploy-use/deploy-software-updates"
+    ]
+}

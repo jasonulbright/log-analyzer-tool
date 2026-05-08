@@ -1,0 +1,28 @@
+{
+    "id": "osd-standalone-swdist-disabled",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x87D01004" }
+        ],
+        "any": [
+            { "component": "smsts", "pattern": "(?i)standalone" },
+            { "component": "smsts", "pattern": "(?i)Install Software" }
+        ]
+    },
+    "verdict": "Task sequence from stand-alone media failed to install an application because the Software Distribution Client agent is not enabled. Standalone media clients start without policy, so the SWDist agent flag is not set.",
+    "evidence": [
+        { "component": "smsts", "match": "0x87D01004" },
+        { "component": "smsts", "match": "Install Software" }
+    ],
+    "fix": "Add a `Run Command Line` step BEFORE any `Install Application` or `Install Package` step, running: `WMIC /namespace:\\\\root\\ccm\\policy\\machine\\requestedconfig path ccm_SoftwareDistributionClientConfig CREATE ComponentName='Enable SWDist', Enabled='true', LockSettings='TRUE', PolicySource='local', PolicyVersion='1.0', SiteSettingsKey='1' /NOINTERACTIVE`. Rebuild the standalone media after the change. Full network-based task sequences do not need this; it is a standalone-media-only workaround.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/task-sequence-fails-error-0x87d01004",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/create-stand-alone-media"
+    ]
+}

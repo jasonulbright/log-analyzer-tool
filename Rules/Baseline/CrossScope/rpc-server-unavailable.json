@@ -1,0 +1,24 @@
+{
+    "id": "rpc-server-unavailable",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x800706BA" }
+        ]
+    },
+    "verdict": "RPC endpoint unreachable. A remote service the client tried to call (WMI, SMS Agent Host, the management point) is not responding on the expected port.",
+    "evidence": [
+        { "component": "CcmExec", "match": "0x800706BA" },
+        { "component": "LocationServices", "match": "RPC" }
+    ],
+    "fix": "Identify the RPC target from the log context (MP, DP, DC, or local service). For local RPC failures, ensure `RpcSs`, `DcomLaunch`, and `RpcEptMapper` services are running. For remote RPC, test `Test-NetConnection <target> -Port 135` from the client and confirm the dynamic RPC port range (49152-65535 on modern Windows) is not blocked between segments. RPC over SMB fallback requires port 445 open to the target.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/windows-server/networking/rpc-server-unavailable-error-troubleshoot",
+        "https://learn.microsoft.com/windows/win32/rpc/rpc-components"
+    ]
+}

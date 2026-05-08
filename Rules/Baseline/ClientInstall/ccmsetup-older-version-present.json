@@ -1,0 +1,22 @@
+{
+    "id": "ccmsetup-older-version-present",
+    "scope": "ClientInstall",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1638", "component": "ccmsetup" }
+        ]
+    },
+    "verdict": "An existing MECM client is already installed. ccmsetup will not downgrade or reinstall side-by-side without an explicit force.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "1638" }
+    ],
+    "fix": "If the existing client is broken or stale, uninstall it cleanly first: `ccmsetup.exe /uninstall` (wait for `CCMCLEAN` to finish). Then run `ccmsetup.exe /forceinstall` for the current version. Do not skip the uninstall step; a partial uninstall leaves registry and WMI state that will cause the next install to fail with 1603.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/about-client-installation-properties"
+    ]
+}

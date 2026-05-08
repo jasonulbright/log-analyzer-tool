@@ -1,0 +1,22 @@
+{
+    "id": "app-msp-patch-corrupt",
+    "scope": "App",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1635", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "Windows Installer could not open the patch (.msp) file. The content is corrupt, zero-byte, or inaccessible.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1635" }
+    ],
+    "fix": "Check the .msp in `%windir%\\ccmcache\\<id>\\`. If missing or zero-byte, redistribute the content. If the file is present but still cannot open, the patch is for a different MSI SKU - verify the `PATCH PROPERTY` or the patch's target product codes with `msiexec /p <patch.msp> /qb /log c:\\windows\\temp\\patch.log` and inspect the log.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/msi/error-codes"
+    ]
+}

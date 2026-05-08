@@ -1,0 +1,23 @@
+{
+    "id": "app-msi-blocked-by-policy",
+    "scope": "App",
+    "confidence": 88,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1625", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "Group Policy forbids this installation. Most commonly AppLocker or a Software Restriction Policy is blocking msiexec or the publisher certificate.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1625" }
+    ],
+    "fix": "From the client, run `gpresult /h c:\\windows\\temp\\gpo.html` and search for AppLocker / SRP rules matching the installer publisher or path. Exclude MECM content paths (`%windir%\\ccmcache\\*`, `C:\\Windows\\Temp\\*`) from AppLocker policies, or add a publisher-based Allow rule for the vendor's signing certificate. For service-account installs check the applied policy set (`gpresult /scope:computer`).",
+    "references": [
+        "https://learn.microsoft.com/windows/security/threat-protection/windows-defender-application-control/applocker/applocker-overview",
+        "https://learn.microsoft.com/windows/win32/msi/error-codes"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "app-postinstall-detection-failed",
+    "scope": "App",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "APP-001" }
+        ]
+    },
+    "verdict": "Application installer ran to completion but the post-install detection method returned false.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "detection", "isRegex": false },
+        { "component": "AppDiscovery", "match": "Discovered" }
+    ],
+    "fix": "Open the deployment type detection rule in the console. Verify the check (file version, MSI ProductCode, or registry value) matches the artifact the installer actually produces. Detection rules that use `Exists` checks on volatile or per-user paths are a common cause; prefer a stable HKLM registry value or an MSI ProductCode check.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/about-app-detection-methods",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "wmi-class-invalid",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80041010" }
+        ]
+    },
+    "verdict": "WBEM_E_INVALID_CLASS. The class being queried does not exist in the target namespace. For MECM this typically means a provider MOF failed to compile, leaving the class registration incomplete.",
+    "evidence": [
+        { "match": "0x80041010" },
+        { "match": "Invalid class" }
+    ],
+    "fix": "Recompile the relevant MOF. For MECM client classes: `mofcomp $env:windir\\ccm\\ccmcore.mof` (and the matching `.mfl`). If the missing class is `SMS_Client`, recompile `client.mof`. If mofcomp fails or the class still does not appear, the WMI repository is damaged: run `winmgmt /salvagerepository`; escalate to `winmgmt /resetrepository` as a last resort, and follow with `ccmsetup.exe /forceinstall` to rebuild the CM namespace.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/wmisdk/wmi-error-constants",
+        "https://learn.microsoft.com/troubleshoot/windows-server/system-management-components/rebuild-wmi-repository"
+    ]
+}

@@ -1,0 +1,31 @@
+{
+    "id": "app-detection-mismatch",
+    "scope": "App",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "APP-001" }
+        ],
+        "none": [
+            { "signature": "APP-002" },
+            { "signature": "APP-003" }
+        ]
+    },
+    "causalOrder": [
+        { "signature": "APP-001", "role": "root" }
+    ],
+    "verdict": "Detection method does not match the installed product. The installer ran cleanly but post-install detection returned false.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "App enforcement completed" },
+        { "component": "AppDiscovery", "match": "Discovered application" }
+    ],
+    "fix": "Re-derive the detection rule from the actual installed artifact. For MSI packages use the ProductCode from the registry uninstall key. For EXE packages prefer a file-version check on the canonical exe, or a registry value with a stable name. Avoid `Exists` checks on volatile paths.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/about-app-detection-methods"
+    ]
+}

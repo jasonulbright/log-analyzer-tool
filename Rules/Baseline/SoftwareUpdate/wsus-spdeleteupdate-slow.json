@@ -1,0 +1,23 @@
+{
+    "id": "wsus-spdeleteupdate-slow",
+    "scope": "SoftwareUpdate",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "WSUS", "pattern": "(?i)spDeleteUpdate" }
+        ]
+    },
+    "verdict": "The `spDeleteUpdate` stored procedure is running for hours during WSUS cleanup. The temp table `@revisionList` has no primary key, so SQL picks a degenerate plan when the table grows large.",
+    "evidence": [
+        { "component": "WSUS", "match": "spDeleteUpdate" }
+    ],
+    "fix": "Against SUSDB, alter `spDeleteUpdate` to add a primary key on the temp table. Microsoft's KB script: `ALTER PROCEDURE [dbo].[spDeleteUpdate] ... DECLARE @revisionList TABLE (RevisionID INT PRIMARY KEY)`. Apply on every SUSDB in the hierarchy. Pair with routine `Invoke-WsusServerCleanup` and SUSDB re-indexing for sustained performance.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/spdeleteupdate-slow-performance",
+        "https://learn.microsoft.com/windows-server/administration/windows-server-update-services/manage/wsus-server-maintenance"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "app-script-timeout",
+    "scope": "App",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x87D00321" }
+        ]
+    },
+    "verdict": "A deployment-type script (detection or install) exceeded its execution timeout.",
+    "evidence": [
+        { "component": "AppDiscovery", "match": "timed out" },
+        { "component": "AppEnforce", "match": "timed out" }
+    ],
+    "fix": "Raise the `Maximum allowed run time` on the deployment type. If the script is a detection rule, optimize it: detection scripts should complete in seconds, not minutes - avoid `Get-ChildItem -Recurse` on large trees and prefer registry or file-version checks. If the script legitimately takes time (e.g. database query), put the slow work in a scheduled prerequisite, not the detection rule.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/about-app-detection-methods",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications"
+    ]
+}

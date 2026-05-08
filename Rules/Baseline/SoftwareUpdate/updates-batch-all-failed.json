@@ -1,0 +1,24 @@
+{
+    "id": "updates-batch-all-failed",
+    "scope": "SoftwareUpdate",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80240022" }
+        ]
+    },
+    "verdict": "The updates handler reported that all updates in a batch failed to install. The batch-level error hides the per-update root cause.",
+    "evidence": [
+        { "component": "UpdatesDeployment", "match": "0x80240022" },
+        { "component": "WUAHandler", "match": "0x80240022" }
+    ],
+    "fix": "Drill into `UpdatesDeployment.log` on the client and find the per-update result codes. Typical patterns: insufficient disk space (`0x80070070`), pending reboot (`0x8024002D`), or dependency chain (`0x80240010`). Fix the per-update root cause; the batch-level 0x80240022 will clear on the next scan.",
+    "references": [
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-errors",
+        "https://learn.microsoft.com/mem/configmgr/sum/troubleshoot/software-update-point-issues"
+    ]
+}

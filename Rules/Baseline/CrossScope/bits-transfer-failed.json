@@ -1,0 +1,24 @@
+{
+    "id": "bits-transfer-failed",
+    "scope": "CrossScope",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "BITS-001" }
+        ]
+    },
+    "verdict": "Background Intelligent Transfer Service error during content transfer. BITS is how the MECM client moves bytes between itself and the DP.",
+    "evidence": [
+        { "component": "ContentTransferManager", "match": "BITS" },
+        { "component": "CAS", "match": "transfer" }
+    ],
+    "fix": "Restart BITS (`Restart-Service BITS`). Inspect stuck jobs: `Get-BitsTransfer -AllUsers | Format-Table DisplayName,JobState,BytesTotal,BytesTransferred`. If jobs are stuck in `TransientError`, examine `%windir%\\ccmcache\\` permissions (the SYSTEM account must have full control). If a proxy is in path, ensure it is not stripping Range headers or rewriting HTTP responses.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/bits/background-intelligent-transfer-service-portal",
+        "https://learn.microsoft.com/powershell/module/bitstransfer/"
+    ]
+}

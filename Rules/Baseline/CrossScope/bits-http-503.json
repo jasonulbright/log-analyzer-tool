@@ -1,0 +1,24 @@
+{
+    "id": "bits-http-503",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80200035" }
+        ]
+    },
+    "verdict": "BITS got HTTP 503 from the DP. The DP's IIS is temporarily overloaded or its application pool is recycling.",
+    "evidence": [
+        { "component": "ContentTransferManager", "match": "503" },
+        { "component": "CAS", "match": "0x80200035" }
+    ],
+    "fix": "On the DP, `Import-Module WebAdministration; Get-WebAppPoolState`. The content DP uses the default pool and `SMS Distribution Points Pool` - start any that are stopped. Raise `Private Memory Limit` to 0 for both pools to prevent memory-limit recycles. If a specific client is hitting 503 but others are not, it is likely hitting the per-client BITS concurrency cap - fewer simultaneous deployments will help.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points",
+        "https://learn.microsoft.com/windows/win32/bits/bits-return-values"
+    ]
+}

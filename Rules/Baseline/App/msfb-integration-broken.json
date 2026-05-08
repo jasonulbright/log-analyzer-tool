@@ -1,0 +1,24 @@
+{
+    "id": "msfb-integration-broken",
+    "scope": "App",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x8024500C" }
+        ]
+    },
+    "verdict": "Microsoft Store for Business integration failed. The Azure AD app registration for the MSfB connector has expired, been deleted, or lost its Graph permissions. Note: MSfB was retired in 2023.",
+    "evidence": [
+        { "match": "0x8024500C" },
+        { "match": "(?i)Microsoft Store" }
+    ],
+    "fix": "MSfB was retired. The only forward-compatible path is to migrate Microsoft Store app deployment to Intune + Winget or to MECM deployment types sourced from the vendor. For short-term continuity on a pre-retirement tenant: re-authorize the MSfB connector in `Administration -> Cloud Services -> Microsoft Store for Business`, refresh the Azure AD app registration secret, and confirm `Microsoft Graph` -> `Application.Read.All` is granted.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/app-management/troubleshoot-microsoft-store-for-business-integration",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/manage-apps-from-the-windows-store-for-business"
+    ]
+}

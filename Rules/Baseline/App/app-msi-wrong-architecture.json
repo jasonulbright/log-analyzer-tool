@@ -1,0 +1,23 @@
+{
+    "id": "app-msi-wrong-architecture",
+    "scope": "App",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1633", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "The MSI architecture does not match the client OS (x86 MSI on ARM64, x64 MSI on x86, etc.).",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1633" }
+    ],
+    "fix": "Check `Template Summary` of the MSI: `Get-AppLockerFileInformation -Path <msi> | Select -ExpandProperty Publisher` or open the MSI in Orca / `msiinfo`. Add a deployment type requirement (`Primary device`/`Operating system architecture`) to target only the matching architecture, or repackage with a dual-arch wrapper.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/msi/error-codes",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications"
+    ]
+}

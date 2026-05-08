@@ -1,0 +1,28 @@
+{
+    "id": "mp-xpress-compression-residue",
+    "scope": "ClientInstall",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "MP_Framework", "pattern": "(?i)(fail|hang|stop)" }
+        ],
+        "any": [
+            { "component": "MP_Framework", "pattern": "(?i)xpress" },
+            { "component": "IIS", "pattern": "(?i)suscomp" }
+        ]
+    },
+    "verdict": "MP stops responding to HTTP client requests. The IIS XPress compression scheme (`suscomp.dll`) left behind by a previously-installed WSUS role is interfering with MECM MP traffic.",
+    "evidence": [
+        { "component": "MP_Framework", "match": "(?i)xpress" },
+        { "component": "IIS", "match": "suscomp" }
+    ],
+    "fix": "Edit `%windir%\\system32\\inetsrv\\config\\applicationHost.config` on the MP. Remove the `<scheme name=\"xpress\" ... dll=\"...\\suscomp.dll\" ... />` entry under `<httpCompression>`. Run `iisreset`. Clients will reconnect to the MP on their next policy cycle. Long-term: do not install the WSUS server role and the MP role on the same host; if the WSUS role was uninstalled but the compression module remains, this cleanup is the standard procedure.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/management-points-stop-responding",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/management-point"
+    ]
+}

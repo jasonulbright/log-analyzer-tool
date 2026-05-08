@@ -1,0 +1,24 @@
+{
+    "id": "app-msi-fatal-1603",
+    "scope": "App",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1603", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "MSI fatal error (1603) during app install. This is a wrapper exit code; the real cause is in the MSI verbose log.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1603" },
+        { "component": "AppEnforce", "match": "Fatal" }
+    ],
+    "fix": "Re-run with MSI verbose logging on the client: `msiexec /i <msi> /l*v c:\\windows\\temp\\install.log` and grep the log for `Return value 3` (the step that failed). Typical root causes: product already installed, SYSTEM lacks write on a target path, locked file from a prior install, TMP/TEMP pointing at an encrypted or read-only folder, or a missing MSI prerequisite.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/msi/error-codes",
+        "https://learn.microsoft.com/windows/win32/msi/windows-installer-logging"
+    ]
+}

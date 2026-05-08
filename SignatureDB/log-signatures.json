@@ -1,0 +1,202 @@
+[
+    {
+        "Id": "DP-001",
+        "Name": "Distribution point unreachable",
+        "Category": "Content",
+        "Components": ["LocationServices"],
+        "Pattern": "(?i)failed to get DP locations|failed to resolve (distribution point|DP)|no (valid )?DP (locations|was found)|GetDPLocations failed",
+        "Explanation": "The client could not locate a distribution point with the requested content. The client may not be in a boundary group with access to a DP, or the DP is offline.",
+        "Resolution": "Verify the client IP is in a boundary group assigned to a DP. Check that content is distributed to an accessible DP. Test network connectivity to the DP.",
+        "LogsToCheck": ["LocationServices.log", "CAS.log"]
+    },
+    {
+        "Id": "DP-002",
+        "Name": "Content not found on distribution point",
+        "Category": "Content",
+        "Components": ["CAS", "ContentTransferManager"],
+        "Pattern": "(?i)content not found|content.*is not available|no content locations? (found|available)|content location request failed",
+        "Explanation": "The DP was reachable but did not have the requested content. The content may not be distributed, or distribution may have failed.",
+        "Resolution": "Check the MECM console for content distribution status. Redistribute if needed. Verify the package/application content source path is accessible.",
+        "LogsToCheck": ["CAS.log", "ContentTransferManager.log", "LocationServices.log"]
+    },
+    {
+        "Id": "DP-003",
+        "Name": "Content download failure",
+        "Category": "Content",
+        "Components": ["CAS", "ContentTransferManager"],
+        "Pattern": "(?i)download failed|content transfer failed|CTM job.*failed|failed to download content|DataTransferService.*error",
+        "Explanation": "Content was located on a DP but the download failed. Common causes: BITS service issues, network interruption, proxy interference, or DP IIS misconfiguration.",
+        "Resolution": "Check BITS service status on the client. Verify network connectivity to the DP. Check IIS logs on the DP for HTTP errors. Try redistributing the content.",
+        "LogsToCheck": ["ContentTransferManager.log", "CAS.log", "DataTransferService.log"]
+    },
+    {
+        "Id": "CACHE-001",
+        "Name": "Insufficient CCM cache space",
+        "Category": "Content",
+        "Components": ["CAS", "ContentTransferManager"],
+        "Pattern": "(?i)not enough (available )?space in cache|cache.*is (full|smaller)|insufficient cache|cannot reserve cache",
+        "Explanation": "The client cache does not have enough free space for the requested content. The content size exceeds available cache capacity.",
+        "Resolution": "Increase the CCM client cache size in client settings or clear stale cached content. Check disk space on the system drive.",
+        "LogsToCheck": ["CAS.log", "ContentTransferManager.log"]
+    },
+    {
+        "Id": "APP-001",
+        "Name": "Application not detected after install",
+        "Category": "AppDeployment",
+        "Components": ["AppDiscovery", "CIAgent"],
+        "Pattern": "(?i)application.*not detected after install|detection.*returned false after|post.?install detection.*fail",
+        "Explanation": "The installer ran successfully but the detection method did not find the application afterward. The detection rule may not match the installed product.",
+        "Resolution": "Review the detection method. Verify it matches the installed product version, path, or registry key. Check if the app installed to an unexpected location or with a different version string.",
+        "LogsToCheck": ["AppDiscovery.log", "AppEnforce.log"]
+    },
+    {
+        "Id": "APP-002",
+        "Name": "Install command execution failed",
+        "Category": "AppDeployment",
+        "Components": ["AppEnforce"],
+        "Pattern": "(?i)execution failed|process returned.*non.?zero|install.*returned error|execmgr.*failed to run|failed to (start|execute|run).*install",
+        "Explanation": "The application install command failed to execute or returned a non-zero exit code. The installer itself encountered an error.",
+        "Resolution": "Check the application installer log for details. Common causes: missing prerequisites, insufficient permissions, conflicting software, or corrupt installer.",
+        "LogsToCheck": ["AppEnforce.log"]
+    },
+    {
+        "Id": "APP-003",
+        "Name": "Install exceeded maximum runtime",
+        "Category": "AppDeployment",
+        "Components": ["AppEnforce"],
+        "Pattern": "(?i)exceeded.*maximum (allowed )?runtime|execution time.*exceeded|timed? ?out.*install|install.*timed? ?out",
+        "Explanation": "The application install did not complete within the allowed maximum runtime configured on the deployment type. The install may still be running or may have hung.",
+        "Resolution": "Increase the maximum allowed runtime on the deployment type. Check if the installer is waiting for user interaction or stuck on a prerequisite. Check for pending reboots.",
+        "LogsToCheck": ["AppEnforce.log"]
+    },
+    {
+        "Id": "WUA-001",
+        "Name": "WSUS scan failure",
+        "Category": "SoftwareUpdates",
+        "Components": ["WUAHandler"],
+        "Pattern": "(?i)scan failed|OnSearchComplete.*failed|WSUS.*scan.*error|failed to initiate scan",
+        "Explanation": "The Windows Update Agent failed to complete a software update scan against the WSUS server. The client cannot evaluate update compliance.",
+        "Resolution": "Verify WSUS server connectivity (port 8530/8531). Check the SoftwareDistribution folder for corruption. Try resetting the WUA components.",
+        "LogsToCheck": ["WUAHandler.log", "WindowsUpdate.log"]
+    },
+    {
+        "Id": "WUA-002",
+        "Name": "WSUS server connection failure",
+        "Category": "SoftwareUpdates",
+        "Components": ["WUAHandler", "UpdatesHandler"],
+        "Pattern": "(?i)WSUS.*(unavailable|unreachable|refused|503|timed? ?out)|failed to connect to (WSUS|update server)|HTTP.*(503|500|404).*WSUS|WUAgent.*connection.*fail",
+        "Explanation": "The client could not connect to the WSUS server. The server may be down, the app pool may be recycling, or a network issue is blocking the connection.",
+        "Resolution": "Verify the WSUS server is running and the WsusPool app pool is started in IIS. Check firewall rules for ports 8530/8531. Test connectivity from the client.",
+        "LogsToCheck": ["WUAHandler.log"]
+    },
+    {
+        "Id": "WUA-003",
+        "Name": "No maintenance window for updates",
+        "Category": "SoftwareUpdates",
+        "Components": ["UpdatesDeployment"],
+        "Pattern": "(?i)no (current or future )?service window|no maintenance window|outside.*maintenance window|waiting for.*service window",
+        "Explanation": "The client has pending updates but no maintenance window is currently open or scheduled. Updates will not install until a window opens.",
+        "Resolution": "Verify a maintenance window exists on the target collection that permits software update installation. Check if the window type is correct (Software Updates vs All Deployments).",
+        "LogsToCheck": ["UpdatesDeployment.log", "ServiceWindowManager.log"]
+    },
+    {
+        "Id": "BITS-001",
+        "Name": "BITS transfer failure",
+        "Category": "Infrastructure",
+        "Components": ["ContentTransferManager", "CAS"],
+        "Pattern": "(?i)BITS.*error|BITS.*(failed|stuck|cancelled)|background.*transfer.*(fail|error|stuck)|BITSHelper.*error",
+        "Explanation": "The Background Intelligent Transfer Service encountered an error during content download. BITS handles all content transfers between client and DP.",
+        "Resolution": "Restart the BITS service on the client. Clear the BITS queue if stuck jobs exist. Check for proxy or firewall interference with HTTP downloads.",
+        "LogsToCheck": ["ContentTransferManager.log", "CAS.log"]
+    },
+    {
+        "Id": "CCM-001",
+        "Name": "Management point unreachable",
+        "Category": "ClientInstall",
+        "Components": ["ccmsetup", "ClientLocation", "PolicyAgent"],
+        "Pattern": "(?i)failed to (connect|communicate) (to|with) (the )?management point|MP (is )?(not available|unreachable|not responding)|cannot (reach|contact).*management point|ccmsetup.*failed to resolve MP",
+        "Explanation": "The client could not communicate with its assigned management point. The MP may be down, or a network/firewall issue is blocking the connection.",
+        "Resolution": "Verify the MP is online and the SMS_MP_CONTROL_MANAGER component is running. Test connectivity on ports 80/443. Check DNS resolution for the MP FQDN.",
+        "LogsToCheck": ["ccmsetup.log", "ClientLocation.log", "PolicyAgent.log"]
+    },
+    {
+        "Id": "CCM-002",
+        "Name": "Client prerequisite missing or failed",
+        "Category": "ClientInstall",
+        "Components": ["ccmsetup"],
+        "Pattern": "(?i)prerequisite.*failed|prerequisite.*not (met|installed|found)|required component.*missing|\\.NET.*not (installed|found)|failed to install prerequisite",
+        "Explanation": "A required prerequisite for the MECM client was not found or failed to install. Common prerequisites: .NET Framework, Windows Installer, WMI.",
+        "Resolution": "Manually install the missing prerequisite. Check the ccmsetup.log for the specific prerequisite name and version required.",
+        "LogsToCheck": ["ccmsetup.log"]
+    },
+    {
+        "Id": "CCM-003",
+        "Name": "MOF compile failure (MPP corruption)",
+        "Category": "ClientInstall",
+        "Components": ["MicrosoftPolicyPlatformSetup.msi"],
+        "Pattern": "(?i)MOF comp(ile|ilation).*fail|mofcomp.*error|failed to compile MOF|policy platform.*fail",
+        "Explanation": "The Microsoft Policy Platform prerequisite failed during MOF compilation, indicating possible WMI repository corruption on the client.",
+        "Resolution": "Repair the WMI repository on the client. Run 'winmgmt /salvagerepository' or 'winmgmt /resetrepository' if salvage fails. Then retry client install.",
+        "LogsToCheck": ["MicrosoftPolicyPlatformSetup.msi.log", "ccmsetup.log"]
+    },
+    {
+        "Id": "WMI-001",
+        "Name": "WMI repository corruption",
+        "Category": "Infrastructure",
+        "Components": [],
+        "Pattern": "(?i)WMI.*(corrupt|invalid|error|failed|broken)|repository.*(corrupt|inconsistent)|winmgmt.*error|failed to (connect to|query) WMI|provider load failure",
+        "Explanation": "WMI errors suggest the WMI repository may be corrupted. Many MECM client functions depend on a healthy WMI repository.",
+        "Resolution": "Run 'winmgmt /verifyrepository'. If inconsistent, try '/salvagerepository' first, then '/resetrepository' as last resort. A reset requires client reinstall.",
+        "LogsToCheck": ["ccmsetup.log", "CcmExec.log"]
+    },
+    {
+        "Id": "CERT-001",
+        "Name": "Client certificate issue",
+        "Category": "Infrastructure",
+        "Components": [],
+        "Pattern": "(?i)certificate.*(expired|invalid|not found|revoked|untrusted|error)|PKI.*(error|fail)|failed to (find|validate|verify).*certificate|SSL.*certificate.*(error|fail)",
+        "Explanation": "A certificate error was detected. The client PKI certificate may be expired, revoked, or missing. This can block HTTPS communication with site systems.",
+        "Resolution": "Check the client certificate in the local machine Personal store. Verify the certificate is not expired and the issuing CA is trusted. Re-enroll if needed.",
+        "LogsToCheck": ["ClientIDManagerStartup.log", "CertificateMaintenance.log"]
+    },
+    {
+        "Id": "POLICY-001",
+        "Name": "Policy retrieval failure",
+        "Category": "Infrastructure",
+        "Components": ["PolicyAgent"],
+        "Pattern": "(?i)failed to (download|request|get) policy|policy download.*fail|policy.*request.*error|could not (get|retrieve) policy",
+        "Explanation": "The client failed to download policy from the management point. Without policy, the client cannot evaluate deployments or compliance.",
+        "Resolution": "Verify management point connectivity. Force a policy refresh cycle on the client. Check if the MP's IIS is responding on the CCM_Incoming virtual directory.",
+        "LogsToCheck": ["PolicyAgent.log", "PolicyEvaluator.log"]
+    },
+    {
+        "Id": "ACCESS-001",
+        "Name": "Access denied",
+        "Category": "Infrastructure",
+        "Components": [],
+        "Pattern": "(?i)access (is )?denied|0x80070005|ERROR_ACCESS_DENIED|insufficient (permission|privilege)|not authorized|unauthorized",
+        "Explanation": "An access denied error occurred. The client may lack permissions to access a resource, or the machine account may not have the expected rights.",
+        "Resolution": "Verify the machine account has access to the resource. Check NTFS/share permissions on content sources and DPs. Ensure the client is domain-joined with a valid computer account.",
+        "LogsToCheck": []
+    },
+    {
+        "Id": "DNS-001",
+        "Name": "DNS resolution failure",
+        "Category": "Infrastructure",
+        "Components": [],
+        "Pattern": "(?i)DNS.*(fail|error|not found|not resolve)|name resolution.*fail|could not resolve (host|server)|FQDN.*not (found|resolv)|getaddrinfo.*fail",
+        "Explanation": "A DNS lookup failed. The client cannot resolve the hostname of a site system (MP, DP, or WSUS). This blocks communication with that server.",
+        "Resolution": "Verify DNS configuration on the client (ipconfig /all). Test name resolution (nslookup <servername>). Check if the DNS record exists and is correct.",
+        "LogsToCheck": []
+    },
+    {
+        "Id": "REBOOT-001",
+        "Name": "Pending reboot blocking operation",
+        "Category": "Infrastructure",
+        "Components": [],
+        "Pattern": "(?i)pending (re(boot|start)|restart)|reboot (is )?(required|pending|needed)|waiting for re(boot|start)|system restart (required|pending)|cannot proceed.*reboot",
+        "Explanation": "A pending reboot is preventing an operation from proceeding. A previous install or update requires a restart before new installations can continue.",
+        "Resolution": "Reboot the client device. If the reboot has been pending for an extended period, investigate what originally required it (Windows Update, software install, etc.).",
+        "LogsToCheck": []
+    }
+]

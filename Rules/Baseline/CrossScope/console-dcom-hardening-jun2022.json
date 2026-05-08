@@ -1,0 +1,28 @@
+{
+    "id": "console-dcom-hardening-jun2022",
+    "scope": "CrossScope",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "SmsAdminUI", "pattern": "(?i)(failed|denied)" }
+        ],
+        "any": [
+            { "errorCode": "0x800706BA" },
+            { "errorCode": "0x80070005" }
+        ]
+    },
+    "verdict": "Configuration Manager console cannot remotely connect to the SMS Provider after the June 2022 Windows security updates. Microsoft's DCOM hardening raised the default authentication level above what older MECM builds negotiate.",
+    "evidence": [
+        { "component": "SmsAdminUI", "match": "(?i)remote" },
+        { "match": "DCOM" }
+    ],
+    "fix": "Install the latest cumulative update for Windows on BOTH sides of the DCOM call (admin workstation / console + SMS Provider host) and the latest MECM current-branch build. If the update cannot be applied immediately, the DCOM hardening can be temporarily rolled back by setting `HKLM\\SOFTWARE\\Microsoft\\Ole\\AppCompat -> RaiseActivationAuthenticationLevel = 0` (DWORD) on the SMS Provider, but this is a SHORT-TERM workaround only; the registry override is removed in March 2023+ Windows updates.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/console-management/dcom-hardening-change-effect",
+        "https://support.microsoft.com/topic/kb5004442"
+    ]
+}

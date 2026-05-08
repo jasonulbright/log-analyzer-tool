@@ -1,0 +1,24 @@
+{
+    "id": "mp-unreachable",
+    "scope": "ClientInstall",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CCM-001" }
+        ]
+    },
+    "verdict": "Client cannot communicate with its assigned management point. The MP may be down, DNS may be wrong, or a firewall is blocking the connection.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "management point" },
+        { "component": "ClientLocation", "match": "MP" }
+    ],
+    "fix": "From the client, resolve the MP FQDN (`Resolve-DnsName <mp-fqdn>`) and test ports 80/443 (`Test-NetConnection <mp-fqdn> -Port 80`). On the site server, confirm `SMS_MP_CONTROL_MANAGER` is running and that `http://<mp-fqdn>/sms_mp/.sms_aut?mplist` returns XML. If the client is cross-forest or cross-domain, verify the MP trust / PKI state.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/management-point",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/deploy-clients-to-windows-computers"
+    ]
+}

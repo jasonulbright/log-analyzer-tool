@@ -1,0 +1,28 @@
+{
+    "id": "site-upgrade-db-blocked",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "CMUpdate", "pattern": "(?i)Upgrade.*Database" }
+        ],
+        "any": [
+            { "component": "CMUpdate", "pattern": "(?i)currently blocked" },
+            { "component": "CMUpdate", "pattern": "(?i)blocking" }
+        ]
+    },
+    "verdict": "MECM site upgrade is stuck at the `Upgrade ConfigMgr Database` step. Another session holds a blocking lock on the CM database, preventing the schema update from progressing.",
+    "evidence": [
+        { "component": "CMUpdate", "match": "currently blocked" },
+        { "component": "CMUpdate", "match": "Upgrade ConfigMgr Database" }
+    ],
+    "fix": "Find the blocker: `SELECT req.session_id, req.blocking_session_id, req.wait_type, req.wait_resource, t.text FROM sys.dm_exec_requests req CROSS APPLY sys.dm_exec_sql_text(req.sql_handle) t WHERE req.blocking_session_id > 0`. Identify the blocking app (often a third-party ITSM integration, a SQL trace, or a stuck report query). Stop it or `KILL <session_id>` as a sysadmin. The upgrade will resume automatically.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/site-upgrade-blocked-in-database-update",
+        "https://learn.microsoft.com/sql/relational-databases/system-dynamic-management-views/sys-dm-exec-requests-transact-sql"
+    ]
+}

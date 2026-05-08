@@ -1,0 +1,22 @@
+{
+    "id": "app-msi-content-corrupt",
+    "scope": "App",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1619", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "Windows Installer could not open the MSI package (1619). The file is corrupt, zero-byte, or the path is invalid.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1619" }
+    ],
+    "fix": "Inspect the content in `%windir%\\ccmcache\\<id>\\` - if the MSI is missing or zero-byte, the BITS download failed. Redistribute the content from the console (right-click the deployment type content -> `Redistribute`), then clear the client cache for that content ID and retry. If redistribution shows success but the client still fails, the MSI on the source is itself corrupt; rebuild the package from source.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/msi/error-codes"
+    ]
+}

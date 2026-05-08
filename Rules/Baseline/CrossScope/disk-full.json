@@ -1,0 +1,24 @@
+{
+    "id": "disk-full",
+    "scope": "CrossScope",
+    "confidence": 92,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070070" }
+        ]
+    },
+    "verdict": "The target disk is out of space. The current operation (cache write, MSI extract, log write) could not complete.",
+    "evidence": [
+        { "match": "0x80070070" },
+        { "match": "not enough space" }
+    ],
+    "fix": "From the client: `Get-CimInstance Win32_LogicalDisk | Select DeviceID, @{N='FreeGB';E={[math]::Round($_.FreeSpace/1GB,1)}}, @{N='TotalGB';E={[math]::Round($_.Size/1GB,1)}}`. Clear obvious offenders: `%temp%`, old `%windir%\\SoftwareDistribution\\Download`, stale CCM cache (`Clear-CcmCache` from the sccmclictr or the client applet). If the client's C: is chronically small, right-size the cache via client settings and move `%temp%` to a partition with room.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/debug/system-error-codes--0-499-",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "ccmsetup-msi-fatal-1603",
+    "scope": "ClientInstall",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1603", "component": "ccmsetup" }
+        ]
+    },
+    "verdict": "ccmsetup exited with MSI fatal error 1603. The client.msi itself failed. Unlike app 1603, this almost always maps to WMI corruption, prerequisite mismatch, or leftover state from a prior uninstall.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "1603" },
+        { "component": "ccmsetup", "match": "Fatal" }
+    ],
+    "fix": "Check WMI health first: `winmgmt /verifyrepository`. Run `ccmsetup.exe /uninstall` then `ccmsetup.exe /forceinstall /noservice` and tail `ccmsetup.log` for the specific MSI `Return value 3` step. Common fix sequences: stop any stuck `msiexec.exe`, delete `%windir%\\ccmsetup\\*.xml`, clear `%windir%\\ccmcache`, and confirm the signing certificate on the ccmsetup payload is not expired.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/deploy-clients-to-windows-computers",
+        "https://learn.microsoft.com/troubleshoot/windows-server/system-management-components/rebuild-wmi-repository"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "wsus-scan-failed",
+    "scope": "SoftwareUpdate",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "WUA-001" }
+        ]
+    },
+    "verdict": "Windows Update Agent scan against WSUS failed. The client cannot evaluate software update compliance until a scan completes.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "scan failed" },
+        { "component": "WUAHandler", "match": "OnSearchComplete" }
+    ],
+    "fix": "Check SoftwareDistribution corruption first: stop `wuauserv`, rename `%windir%\\SoftwareDistribution` to `SoftwareDistribution.old`, restart `wuauserv`, then force a scan cycle (`Invoke-CimMethod -ClassName SMS_Client -MethodName TriggerSchedule -Arguments @{sScheduleID='{00000000-0000-0000-0000-000000000113}'}`). If scans still fail, verify the client can resolve and reach the WSUS server on its configured port (default 8530 HTTP / 8531 HTTPS).",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/sum/troubleshoot/software-update-point-issues",
+        "https://learn.microsoft.com/windows/deployment/update/windows-update-troubleshooting"
+    ]
+}

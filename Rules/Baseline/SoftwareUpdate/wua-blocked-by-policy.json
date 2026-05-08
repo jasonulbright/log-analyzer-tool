@@ -1,0 +1,23 @@
+{
+    "id": "wua-blocked-by-policy",
+    "scope": "SoftwareUpdate",
+    "confidence": 92,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80240025" }
+        ]
+    },
+    "verdict": "A Group Policy setting has disabled access to Windows Update. The client cannot scan or install updates until the policy is adjusted.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80240025" }
+    ],
+    "fix": "Inspect `HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU`: `NoAutoUpdate`, `DisableWindowsUpdateAccess`, `SetDisableUXWUAccess`. The `Remove access to use all Windows Update features` policy is the usual culprit. Adjust the offending GPO to allow MECM-managed update scans (set `Configure Automatic Updates` to `4 - Auto download and schedule the install` or disable the block entirely).",
+    "references": [
+        "https://learn.microsoft.com/windows/deployment/update/waas-wu-settings",
+        "https://learn.microsoft.com/mem/configmgr/sum/get-started/install-a-software-update-point"
+    ]
+}

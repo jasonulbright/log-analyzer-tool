@@ -1,0 +1,28 @@
+{
+    "id": "odbc-18611-strict-null",
+    "scope": "CrossScope",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070057" }
+        ],
+        "any": [
+            { "component": "ConfigMgrSetup", "pattern": "(?i)ODBC" },
+            { "component": "ConfigMgrSetup", "pattern": "(?i)SQL" }
+        ]
+    },
+    "verdict": "ODBC Driver for SQL Server 18.6.1.1 broke MECM: this driver enforces stricter NULL handling on non-nullable columns, which MECM setup and site operations trip over.",
+    "evidence": [
+        { "component": "ConfigMgrSetup", "match": "0x80070057" },
+        { "component": "ConfigMgrSetup", "match": "(?i)ODBC" }
+    ],
+    "fix": "Upgrade the ODBC Driver for SQL Server to 18.6.2.1 or later, which fixes the regression. Alternately downgrade to 18.4.1.1. MECM 2503 and later ship 18.6.2.1 as redistributable content, so upgrading the site to 2503+ covers the driver upgrade automatically. Rolling back the driver is safe; 18.6.1.1 contains no security updates unique to that build.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/update-odbc-18611-causes-issues-configmgr",
+        "https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server"
+    ]
+}

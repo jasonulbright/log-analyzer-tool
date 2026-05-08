@@ -1,0 +1,24 @@
+{
+    "id": "app-install-command-failed",
+    "scope": "App",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "APP-002" }
+        ]
+    },
+    "verdict": "The application install command returned a non-zero exit code. The installer itself encountered an error.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "Execution failed" },
+        { "component": "AppEnforce", "match": "returned" }
+    ],
+    "fix": "Open the product-specific installer log (typically in %windir%\\ccmcache\\<guid>\\ or %temp%\\) and find the first failing step. Common root causes: missing prerequisite (.NET, VC runtime), insufficient permissions, conflicting software, pending reboot, or a corrupted download. If the exit code is 1618, another MSI is mid-install; if 1603, the MSI failed (keep reading ccmsetup.log or the per-product log).",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications",
+        "https://learn.microsoft.com/windows/win32/msi/error-codes"
+    ]
+}

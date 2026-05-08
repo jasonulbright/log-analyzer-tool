@@ -1,0 +1,24 @@
+{
+    "id": "wu-driver-operation-failure",
+    "scope": "SoftwareUpdate",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070490" }
+        ]
+    },
+    "verdict": "Driver operation failed during Windows Update install. CBS could not read the driver identity or the driver payload was rejected by the servicing stack.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80070490" },
+        { "match": "Failed reading Identity" }
+    ],
+    "fix": "Check `C:\\Windows\\Logs\\CBS\\CBS.log` for `Failed reading Identity for driver operation sequence` entries; the offending driver package ID is on that line. Remove that driver version, reboot, and let the update re-detect. If the failure is on an SSU (Servicing Stack Update), install the latest standalone SSU `.msu` manually before retrying the cumulative. SSU-cumulative combined packages must not be split.",
+    "references": [
+        "https://learn.microsoft.com/windows/deployment/update/servicing-stack-updates",
+        "https://learn.microsoft.com/troubleshoot/windows-client/installing-updates-features-roles/windows-update-issues-troubleshooting"
+    ]
+}

@@ -1,0 +1,24 @@
+{
+    "id": "client-prerequisite-failed",
+    "scope": "ClientInstall",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CCM-002" }
+        ]
+    },
+    "verdict": "An MECM client prerequisite failed during ccmsetup. Common culprits: .NET Framework version gap, Windows Installer, or Microsoft Policy Platform.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "prerequisite" },
+        { "component": "ccmsetup", "match": "not installed" }
+    ],
+    "fix": "Read the failure line in `ccmsetup.log` for the specific prerequisite name and required version. Install it manually on the client (or push via a one-off package), then run `ccmsetup.exe /forceinstall` to redo the install. For .NET prerequisites, verify OS-bundled version meets the MECM minimum documented in the client-prerequisites reference.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/configs/client-prerequisites",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/about-client-installation-properties"
+    ]
+}

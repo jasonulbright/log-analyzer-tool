@@ -1,0 +1,23 @@
+{
+    "id": "app-msp-base-missing",
+    "scope": "App",
+    "confidence": 88,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1642", "component": "AppEnforce" }
+        ]
+    },
+    "verdict": "The patch (.msp) cannot be applied because the base product is not installed.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "1642" }
+    ],
+    "fix": "Add a dependency on the base-product deployment type in MECM, or reshape the deployment so the base MSI and the patch ship together via a wrapper script (`install.ps1` that installs the base then the patch). Do not rely on the MECM client to retry the patch; the detection method on the patch will keep returning false until the base is present.",
+    "references": [
+        "https://learn.microsoft.com/windows/win32/msi/patching",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications"
+    ]
+}

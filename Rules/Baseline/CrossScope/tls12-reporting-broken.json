@@ -1,0 +1,28 @@
+{
+    "id": "tls12-reporting-broken",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "Srsrp", "pattern": "(failed|error)" }
+        ],
+        "any": [
+            { "component": "Srsrp", "pattern": "TLS" },
+            { "component": "Srsrp", "pattern": "SSL" }
+        ]
+    },
+    "verdict": "Reporting services point failed after TLS 1.2 enforcement. Site server or site system components do not meet the TLS 1.2 prereqs (strong-crypto .NET, WinHTTP default protocols, SQL native client).",
+    "evidence": [
+        { "component": "Srsrp", "match": "TLS" },
+        { "component": "Srsrp", "match": "Successfully created srsserver" }
+    ],
+    "fix": "Apply the TLS 1.2 readiness checklist on every site server and site system: (1) install the .NET 4.6+ strong-crypto update and set `SchUseStrongCrypto=1` under `HKLM\\SOFTWARE\\Microsoft\\.NETFramework\\v4.0.30319` and its Wow6432Node twin; (2) set WinHTTP default secure protocols to include TLS 1.2; (3) update SQL Server Native Client to a TLS 1.2-capable build. Reboot after changes. SSRS will re-register on next SMS_Executive cycle.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/security/enable-tls-1-2",
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/alerts-reports-queries/reporting-stops-working"
+    ]
+}

@@ -1,0 +1,23 @@
+{
+    "id": "app-uninstall-incomplete",
+    "scope": "App",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x87D00325" }
+        ]
+    },
+    "verdict": "Uninstall command returned success but the detection rule still finds the product afterward. The uninstall did not fully remove the artifact the rule looks for.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "still detected" },
+        { "component": "AppDiscovery", "match": "Discovered" }
+    ],
+    "fix": "Two root causes: (1) the uninstall command is wrong - the MSI ProductCode in the uninstall string does not match the installed product code; (2) the detection rule checks something the uninstaller does not touch (a leftover registry key, a user-profile file). For MSI products, use `Get-WmiObject Win32_Product | Where-Object { $_.Name -like '<name>*' }` to find the true ProductCode. For scripted uninstalls, add a cleanup step that removes whatever the detection rule is checking.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/about-app-detection-methods"
+    ]
+}

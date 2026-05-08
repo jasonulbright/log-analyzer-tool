@@ -1,0 +1,24 @@
+{
+    "id": "wsus-scan-prereq-limit",
+    "scope": "SoftwareUpdate",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80244007" }
+        ]
+    },
+    "verdict": "WSUS client scan failed with 0x80244007. The number of updates the client must pass as prerequisites to `SyncUpdates` exceeds the WSUS web service limit. Typically seen on long-lived servers with many superseded updates.",
+    "evidence": [
+        { "component": "WUAHandler", "match": "0x80244007" },
+        { "component": "WindowsUpdate", "match": "SyncUpdates" }
+    ],
+    "fix": "On the WSUS server, edit `%programfiles%\\Update Services\\WebServices\\ClientWebService\\web.config`. Under `<httpRuntime>`, raise `maxRequestLength` to `204800` and add `executionTimeout=\"7200\"`. Under `<appSettings>`, add `<add key=\"maxInstalledPrerequisites\" value=\"800\"/>` and `<add key=\"maxUpdatesPerRequest\" value=\"200\"/>`. Restart IIS. Decline superseded/expired updates via `Invoke-WsusServerCleanup -CleanupObsoleteUpdates -CleanupUnneededContentFiles -DeclineSupersededUpdates -DeclineExpiredUpdates` to shrink the prerequisite graph at the source.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/error-80244007-when-wsus-client-scans-updates",
+        "https://learn.microsoft.com/powershell/module/updateservices/invoke-wsusservercleanup"
+    ]
+}

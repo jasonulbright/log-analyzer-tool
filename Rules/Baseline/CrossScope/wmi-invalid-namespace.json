@@ -1,0 +1,24 @@
+{
+    "id": "wmi-invalid-namespace",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80041008" }
+        ]
+    },
+    "verdict": "WMI returned `INVALID_NAMESPACE`. A namespace the client or MECM expected is missing from the repository. Usually `root\\ccm` or a provider namespace.",
+    "evidence": [
+        { "component": "CcmExec", "match": "0x80041008" },
+        { "component": "ccmsetup", "match": "0x80041008" }
+    ],
+    "fix": "Confirm the missing namespace: `Get-CimInstance -Namespace root -ClassName __Namespace | Select-Object Name`. If `ccm` is absent, the MECM client WMI registration is gone - `ccmsetup.exe /uninstall` then `ccmsetup.exe /forceinstall`. If other core namespaces are missing, repair WMI: `winmgmt /salvagerepository`; escalate to `winmgmt /resetrepository` only if salvage fails.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/windows-server/system-management-components/rebuild-wmi-repository",
+        "https://learn.microsoft.com/windows/win32/wmisdk/wmi-error-constants"
+    ]
+}

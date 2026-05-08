@@ -1,0 +1,23 @@
+{
+    "id": "ccmsetup-srp-blocked",
+    "scope": "ClientInstall",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "1260", "component": "ccmsetup" }
+        ]
+    },
+    "verdict": "Software Restriction Policy or AppLocker blocked ccmsetup.exe from running. The client can never install until the policy permits the ccmsetup binary (or its signing certificate).",
+    "evidence": [
+        { "component": "ccmsetup", "match": "1260" }
+    ],
+    "fix": "Run `gpresult /h c:\\windows\\temp\\gpo.html` and search the AppLocker / SRP sections for rules affecting `%windir%\\ccmsetup\\*`, `\\ccmsetup.exe`, or the Microsoft code-signing certificate. Add an Allow rule for the ccmsetup path or the Microsoft publisher. If AppLocker is in `Audit only` for executables, warnings appear in `Applications and Services / Microsoft / Windows / AppLocker / EXE and DLL` and make the culprit rule obvious.",
+    "references": [
+        "https://learn.microsoft.com/windows/security/threat-protection/windows-defender-application-control/applocker/applocker-overview",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/deploy-clients-to-windows-computers"
+    ]
+}

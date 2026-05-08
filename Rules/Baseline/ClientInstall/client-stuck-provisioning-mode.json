@@ -1,0 +1,23 @@
+{
+    "id": "client-stuck-provisioning-mode",
+    "scope": "ClientInstall",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "ccmexec", "pattern": "[Pp]rovisioning [Mm]ode" }
+        ]
+    },
+    "verdict": "Client stuck in provisioning mode after an in-place OS upgrade. Caused by specifying an OEM product key during the upgrade; `Setupcomplete.cmd` is disabled when OEM keys are used, so the post-upgrade client re-registration never completes.",
+    "evidence": [
+        { "component": "ccmexec", "match": "provisioning mode" }
+    ],
+    "fix": "Immediate: exit provisioning mode on the affected client: `Invoke-CimMethod -Namespace root\\ccm -ClassName SMS_Client -MethodName SetClientProvisioningMode -Arguments @{ bEnable = $false }` (or set `HKLM\\SOFTWARE\\Microsoft\\CCM\\CcmExec ProvisioningMode` to `false` and restart CcmExec). Preventative: change the upgrade task sequence to use a KMS client setup key, not an OEM key. Keep the OEM key in a separate `Apply Windows Settings` post-upgrade step if it must be preserved.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/client-management/configmgr-client-left-in-provisioning-mode",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/manage-task-sequences-to-automate-tasks"
+    ]
+}

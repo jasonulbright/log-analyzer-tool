@@ -1,0 +1,24 @@
+{
+    "id": "osd-driver-inject-failed",
+    "scope": "CrossScope",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80070032" }
+        ]
+    },
+    "verdict": "Driver injection into the offline image failed during OS deployment. DISM rejected `/Add-Driver` with `ERROR_NOT_SUPPORTED`, typically because the driver architecture or INF target build does not match the WIM.",
+    "evidence": [
+        { "match": "0x80070032" },
+        { "match": "Failed to add driver to driver store" }
+    ],
+    "fix": "In `smsts.log`, locate the `Apply Driver Package` step and identify the specific INF that failed. Confirm architecture matches the WIM (x64 drivers only on x64 images). Remove drivers whose INF target decorators reference older OS versions (`NT amd64.6.3` on Win10/11 targets). Repackage the driver pack excluding incompatible entries. If the failure only happens on certain models, pin the driver package to a model-specific task sequence via a Query WMI condition.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/manage-drivers",
+        "https://learn.microsoft.com/windows-hardware/manufacture/desktop/what-is-dism"
+    ]
+}

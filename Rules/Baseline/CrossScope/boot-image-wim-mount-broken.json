@@ -1,0 +1,28 @@
+{
+    "id": "boot-image-wim-mount-broken",
+    "scope": "CrossScope",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x8007007B" }
+        ],
+        "any": [
+            { "component": "SMSProv", "pattern": "(?i)boot image" },
+            { "component": "DistMgr", "pattern": "(?i)boot" }
+        ]
+    },
+    "verdict": "Boot image operation failed. The `WIMMount` service on the SMS Provider host is corrupted, misconfigured, or missing.",
+    "evidence": [
+        { "component": "SMSProv", "match": "0x8007007B" },
+        { "component": "SMSProv", "match": "WIMMount" }
+    ],
+    "fix": "On the SMS Provider host, reinstall WIMMount from the Windows ADK: open `<ADK-path>\\Assessment and Deployment Kit\\Deployment Tools\\amd64\\DISM` and run `WimMountAdkSetupAmd64.exe /Install`. Verify the service starts: `Get-Service WIMMount`. Retry the boot image action.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/error-managing-boot-images",
+        "https://learn.microsoft.com/windows-hardware/get-started/adk-install"
+    ]
+}

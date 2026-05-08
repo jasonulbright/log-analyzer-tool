@@ -1,0 +1,24 @@
+{
+    "id": "app-not-detected-87d1041c",
+    "scope": "App",
+    "confidence": 75,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x87D1041C" }
+        ]
+    },
+    "verdict": "App installer ran without error but the detection rule returned false afterward. Same family as the APP-001 signature path but surfaced via the CM-specific error code.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "0x87D1041C" },
+        { "component": "AppDiscovery", "match": "not detected" }
+    ],
+    "fix": "Same root causes as `app-postinstall-detection-failed`: the detection rule checks the wrong artifact. Point it at an HKLM registry value the installer writes (not HKCU), an MSI ProductCode (for MSI packages), or a file version check on the canonical installed exe. For installers that target per-user install, set the deployment type to `Install for user` or scope detection accordingly.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/about-app-detection-methods",
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications"
+    ]
+}

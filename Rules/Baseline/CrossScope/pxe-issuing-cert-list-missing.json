@@ -1,0 +1,28 @@
+{
+    "id": "pxe-issuing-cert-list-missing",
+    "scope": "CrossScope",
+    "confidence": 85,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80092002" }
+        ],
+        "any": [
+            { "component": "SMSPXE", "pattern": "(?i)pxe" },
+            { "component": "SMSPXE", "pattern": "(?i)certificate" }
+        ]
+    },
+    "verdict": "PXE boot failed because the `IssuingCertificateList` registry value is missing on the DP. Without it, SMSPXE cannot validate the PXE media-signing cert against the site's issuer list.",
+    "evidence": [
+        { "component": "SMSPXE", "match": "0x80092002" },
+        { "component": "SMSPXE", "match": "Failed to create" }
+    ],
+    "fix": "On the MP, read `HKLM\\SOFTWARE\\Microsoft\\SMS\\Security` -> `IssuingCertificateList`. Copy that REG_MULTI_SZ value to the DP: `reg add 'HKLM\\SOFTWARE\\Microsoft\\SMS\\Security' /v IssuingCertificateList /t REG_MULTI_SZ /d '<value>' /f`. Restart WDS on the DP. The value is identical across all MP/DP pairs in the same hierarchy, so copying from any healthy MP is safe.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/pxe-boot-not-work",
+        "https://learn.microsoft.com/mem/configmgr/osd/deploy-use/prepare-for-pxe-initiated-os-deployments"
+    ]
+}

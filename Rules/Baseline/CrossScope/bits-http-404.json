@@ -1,0 +1,24 @@
+{
+    "id": "bits-http-404",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x8020002C" }
+        ]
+    },
+    "verdict": "BITS got HTTP 404 from the DP. The specific content file does not exist at the URL the client requested. Distribution is incomplete, or the content was removed from the DP while still referenced by a deployment.",
+    "evidence": [
+        { "component": "ContentTransferManager", "match": "404" },
+        { "component": "CAS", "match": "0x8020002C" }
+    ],
+    "fix": "In the console, open the package / application and check `Content Status` for the target DP. If status is `Failed` or partial, redistribute. If status shows `Success`, the index is stale - run `Update-CMDistributionPoint -Name <dp> -PackageId <id>` to force a content reverification. For infrequent content, confirm the DP drive has not hit the `Disk space reserve` threshold and started deleting packages.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/install-and-configure-distribution-points",
+        "https://learn.microsoft.com/powershell/module/configurationmanager/update-cmdistributionpoint"
+    ]
+}

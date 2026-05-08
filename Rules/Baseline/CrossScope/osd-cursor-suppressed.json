@@ -1,0 +1,25 @@
+{
+    "id": "osd-cursor-suppressed",
+    "scope": "CrossScope",
+    "confidence": 70,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "smsts", "pattern": "(?i)Setup Windows and ConfigMgr" }
+        ],
+        "any": [
+            { "component": "OSDSetupWindows", "pattern": "(?i)Installing hook" }
+        ]
+    },
+    "verdict": "During OSD (F8 command prompt), no mouse cursor appears after the reboot from WinPE. Windows Setup suppresses the cursor by design; MECM TS steps run within the Setup lifecycle so the suppression applies to them too.",
+    "evidence": [
+        { "component": "OSDSetupWindows", "match": "Setup Windows and ConfigMgr" }
+    ],
+    "fix": "Cosmetic only; not a failure. If required for manual debugging, add a `Run Command Line` step that sets `reg add 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System' /v EnableCursorSuppression /t REG_DWORD /d 0 /f` before the `Setup Windows and ConfigMgr` step. Revert at the end of the TS if you do not want the change to persist in the deployed image.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/no-mouse-cursor-during-osd-task-sequence"
+    ]
+}

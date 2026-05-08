@@ -1,0 +1,23 @@
+{
+    "id": "app-install-timed-out",
+    "scope": "App",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "APP-003" }
+        ]
+    },
+    "verdict": "The application install exceeded the deployment type `Maximum allowed run time`. The install may still be running, may be waiting on user input, or may have hung on a pending reboot.",
+    "evidence": [
+        { "component": "AppEnforce", "match": "maximum" },
+        { "component": "AppEnforce", "match": "runtime" }
+    ],
+    "fix": "Raise `Maximum allowed run time` on the deployment type to match the installer's worst-case (vendor installers often take 30+ minutes on first-run). Confirm the installer is silent (no GUI prompts can surface on a client). Check for pending reboots on the client that may be blocking the installer. If the installer genuinely hangs, instrument it with a wrapper that logs to a known path and retries.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/apps/deploy-use/create-applications"
+    ]
+}

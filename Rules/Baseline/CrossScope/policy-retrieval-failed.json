@@ -1,0 +1,24 @@
+{
+    "id": "policy-retrieval-failed",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "POLICY-001" }
+        ]
+    },
+    "verdict": "Client failed to download policy from its management point. Without policy the client cannot evaluate deployments, compliance, or updates.",
+    "evidence": [
+        { "component": "PolicyAgent", "match": "policy" },
+        { "component": "PolicyEvaluator", "match": "policy" }
+    ],
+    "fix": "From the client, trigger a machine policy retrieval: `Invoke-CimMethod -Namespace root\\ccm -ClassName SMS_Client -MethodName TriggerSchedule -Arguments @{ sScheduleID = '{00000000-0000-0000-0000-000000000021}' }`. If policy still fails, confirm `http://<mp-fqdn>/ccm_system/request` responds. On the MP, verify IIS bindings and that the `CCM_Incoming` app pool is running.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/servers/deploy/configure/management-point",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/manage/manage-clients"
+    ]
+}

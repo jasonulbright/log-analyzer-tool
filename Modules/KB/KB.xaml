@@ -1,0 +1,103 @@
+<UserControl
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:Controls="clr-namespace:MahApps.Metro.Controls;assembly=MahApps.Metro">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- Intro -->
+            <RowDefinition Height="Auto"/>  <!-- Filter row -->
+            <RowDefinition Height="*"/>     <!-- DataGrid + detail -->
+            <RowDefinition Height="Auto"/>  <!-- Footer counts -->
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Loaded rules from the baseline bundle and the local overlay. Local overlay wins on id collision."
+                   FontSize="12"
+                   Foreground="{DynamicResource MahApps.Brushes.Gray1}"
+                   TextWrapping="Wrap"
+                   Margin="4,4,4,10"/>
+
+        <!-- Filter row -->
+        <Grid Grid.Row="1" Margin="4,0,4,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="180"/>
+                <ColumnDefinition Width="180"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="txtKbSearch"
+                     Controls:TextBoxHelper.Watermark="Search id or verdict..."
+                     FontSize="13" Margin="0,0,8,0"
+                     Style="{DynamicResource MahApps.Styles.TextBox}"/>
+
+            <ComboBox x:Name="cmbKbScope"
+                      FontSize="13" Margin="0,0,8,0"
+                      Style="{DynamicResource MahApps.Styles.ComboBox}"/>
+
+            <ComboBox x:Name="cmbKbSource"
+                      Grid.Column="2"
+                      FontSize="13" Margin="0,0,8,0"
+                      Style="{DynamicResource MahApps.Styles.ComboBox}"/>
+
+            <Button x:Name="btnKbRefresh"
+                    Grid.Column="3" Content="Refresh"
+                    MinWidth="90" Height="30"
+                    Style="{DynamicResource MahApps.Styles.Button.Square}"
+                    Controls:ControlsHelper.ContentCharacterCasing="Normal"/>
+        </Grid>
+
+        <!-- List + detail -->
+        <Grid Grid.Row="2" Margin="4,0,4,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="2*" MinWidth="240"/>
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="gridKbRules"
+                      AutoGenerateColumns="False" IsReadOnly="True"
+                      SelectionMode="Single" HeadersVisibility="Column"
+                      GridLinesVisibility="None" CanUserReorderColumns="False"
+                      CanUserResizeRows="False" BorderThickness="1"
+                      BorderBrush="{DynamicResource MahApps.Brushes.Gray8}"
+                      RowHeight="26" FontSize="12">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Source"  Binding="{Binding SourceLabel}"    Width="80"/>
+                    <DataGridTextColumn Header="Id"      Binding="{Binding Id}"             Width="2*"/>
+                    <DataGridTextColumn Header="Scope"   Binding="{Binding Scope}"          Width="120"/>
+                    <DataGridTextColumn Header="Conf"    Binding="{Binding Confidence}"     Width="60"/>
+                    <DataGridTextColumn Header="Verdict" Binding="{Binding VerdictSnippet}" Width="3*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <GridSplitter Grid.Column="1" Width="6"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                          Background="{DynamicResource MahApps.Brushes.Gray8}"/>
+
+            <Border Grid.Column="2"
+                    BorderBrush="{DynamicResource MahApps.Brushes.Gray8}"
+                    BorderThickness="1" Padding="10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="txtKbDetail"
+                             IsReadOnly="True" AcceptsReturn="True"
+                             BorderThickness="0" Background="Transparent"
+                             FontFamily="Cascadia Code, Consolas, Courier New" FontSize="11"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             Text="Select a rule to view its schema, conditions, evidence, and fix."/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Footer count -->
+        <TextBlock x:Name="txtKbFooter"
+                   Grid.Row="3"
+                   FontSize="11"
+                   Foreground="{DynamicResource MahApps.Brushes.Gray1}"
+                   Margin="4,0,4,4"
+                   Text="Loading rulebase..."/>
+    </Grid>
+</UserControl>

@@ -1,0 +1,9 @@
+{
+    "Name": "KB",
+    "Title": "Rules",
+    "Subtitle": "Loaded rules from baseline + local overlay.",
+    "Version": "1.0.0-placeholder",
+    "UI": "WPF",
+    "EntryScript": "KB.ps1",
+    "InitFunction": "New-LATKBView"
+}

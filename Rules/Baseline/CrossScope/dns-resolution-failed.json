@@ -1,0 +1,24 @@
+{
+    "id": "dns-resolution-failed",
+    "scope": "CrossScope",
+    "confidence": 82,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "DNS-001" }
+        ]
+    },
+    "verdict": "DNS name resolution failed for a site system. The client cannot reach the MP, DP, or WSUS/SUP by name, which blocks everything downstream.",
+    "evidence": [
+        { "match": "could not resolve" },
+        { "match": "DNS" }
+    ],
+    "fix": "From the client: `ipconfig /all` to confirm DNS servers are reachable; `Resolve-DnsName <site-system-fqdn>` to see the authoritative answer. If DNS is wrong (stale A record after a server move) fix it at the DNS zone. If DNS is right but the client resolves incorrectly, flush cache: `ipconfig /flushdns; Clear-DnsClientCache`. Confirm no local `hosts` file override.",
+    "references": [
+        "https://learn.microsoft.com/windows-server/networking/dns/dns-top",
+        "https://learn.microsoft.com/powershell/module/dnsclient/"
+    ]
+}

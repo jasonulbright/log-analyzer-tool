@@ -1,0 +1,9 @@
+{
+    "Name": "History",
+    "Title": "History",
+    "Subtitle": "Browse stored incident bundles from prior triage runs.",
+    "Version": "1.0.0-placeholder",
+    "UI": "WPF",
+    "EntryScript": "History.ps1",
+    "InitFunction": "New-LATHistoryView"
+}

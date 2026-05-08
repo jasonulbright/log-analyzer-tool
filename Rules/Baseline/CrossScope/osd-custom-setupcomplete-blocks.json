@@ -1,0 +1,28 @@
+{
+    "id": "osd-custom-setupcomplete-blocks",
+    "scope": "CrossScope",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "OSDSetupWindows", "pattern": "(?i)setup.?complete" }
+        ],
+        "any": [
+            { "errorCode": "0x80070005", "component": "OSDSetupWindows" },
+            { "component": "OSDSetupWindows", "pattern": "Installing hook" }
+        ]
+    },
+    "verdict": "OSD task sequence failed at `Setup Windows and ConfigMgr` because a custom `SetupComplete.cmd` was placed in the image. MECM OSD reserves `SetupComplete.cmd` for TS continuation and overwriting it breaks the hand-off from WinPE to full OS.",
+    "evidence": [
+        { "component": "OSDSetupWindows", "match": "SetupComplete" },
+        { "component": "OSDSetupWindows", "match": "Installing hook" }
+    ],
+    "fix": "Remove any custom `SetupComplete.cmd` delivered by earlier TS steps or baked into the WIM. Move whatever work it did into task-sequence steps instead (a `Run Command Line` or `Run PowerShell Script` step between `Apply Operating System` and `Setup Windows and ConfigMgr`). If the custom file is in a reference image, rebuild the image without it; MECM owns that filename for the duration of OSD.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/os-deployment/osd-task-sequence-fails-error-80070005",
+        "https://learn.microsoft.com/mem/configmgr/osd/understand/task-sequence-steps"
+    ]
+}

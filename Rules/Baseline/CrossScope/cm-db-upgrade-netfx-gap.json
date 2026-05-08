@@ -1,0 +1,24 @@
+{
+    "id": "cm-db-upgrade-netfx-gap",
+    "scope": "CrossScope",
+    "confidence": 90,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x87D20B15" }
+        ]
+    },
+    "verdict": "ConfigMgr site database upgrade aborted because the site server's .NET Framework is below the minimum. Current branches require 4.6.2 at minimum and recommend 4.8.",
+    "evidence": [
+        { "match": "0x87D20B15" },
+        { "match": "Database" }
+    ],
+    "fix": "On the site server, check the installed .NET version: `(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\NET Framework Setup\\NDP\\v4\\Full').Release`. 528040 or higher = 4.8; 394802 or higher = 4.6.2. Install `NDP48-x86-x64-AllOS-ENU.exe` from the offline installer, reboot the site server, resume the CM update from `Administration / Updates and Servicing`. Do not attempt to bypass the prereq; a half-upgraded site DB is an incident requiring SQL restore from backup.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/configs/site-and-site-system-prerequisites",
+        "https://learn.microsoft.com/dotnet/framework/install/on-windows-10"
+    ]
+}

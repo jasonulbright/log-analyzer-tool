@@ -1,0 +1,32 @@
+{
+    "id": "ccm-prereq-missing",
+    "scope": "ClientInstall",
+    "confidence": 80,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "signature": "CCM-002" }
+        ],
+        "any": [
+            { "errorCode": "1603", "component": "ccmsetup" },
+            { "errorCode": "10", "component": "ccmsetup" }
+        ]
+    },
+    "causalOrder": [
+        { "signature": "CCM-002", "role": "root" },
+        { "errorCode": "1603", "role": "symptom" }
+    ],
+    "verdict": "MECM client prerequisite missing or failed to install. ccmsetup aborted before client.msi completed.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "prerequisite" },
+        { "component": "ccmsetup", "match": "Fatal error" }
+    ],
+    "fix": "Open ccmsetup.log and locate the named prerequisite (typically .NET Framework, Windows Installer, or Microsoft Policy Platform). Install it manually on the client, then re-run ccmsetup.exe. If the prerequisite is .NET, verify the OS-bundled version meets the MECM minimum.",
+    "references": [
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/about-client-installation-properties",
+        "https://learn.microsoft.com/mem/configmgr/core/plan-design/configs/client-prerequisites"
+    ]
+}

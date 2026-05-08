@@ -1,0 +1,26 @@
+{
+    "id": "wsus-restart-no-notification",
+    "scope": "SoftwareUpdate",
+    "confidence": 72,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "UpdatesDeployment", "pattern": "(?i)(restart|reboot)" }
+        ],
+        "any": [
+            { "component": "UpdatesDeployment", "pattern": "(?i)no notification" },
+            { "component": "UpdatesDeployment", "pattern": "(?i)without.*warning" }
+        ]
+    },
+    "verdict": "WSUS clients are restarting automatically without user notification after updates install. The client is missing Windows Installer 3.1 or later, which the deadline-driven restart flow requires for proper notification handling.",
+    "evidence": [
+        { "component": "UpdatesDeployment", "match": "(?i)restart" }
+    ],
+    "fix": "Install Windows Installer 3.1+ (redistributable) on affected clients. On modern Windows (10+, Server 2016+), MSI 5.0+ ships in-box so this only affects legacy holdouts. For interim mitigation until the MSI update rolls out, deploy the registry keys that enable `NoAutoRebootWithLoggedOnUsers` under `HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AU`.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/update-management/wsus-client-computers-restart-automatically"
+    ]
+}

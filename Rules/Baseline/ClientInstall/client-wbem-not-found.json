@@ -1,0 +1,24 @@
+{
+    "id": "client-wbem-not-found",
+    "scope": "ClientInstall",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "errorCode": "0x80041002", "component": "ccmsetup" }
+        ]
+    },
+    "verdict": "Client install failed registering `CCM_Service_HostingConfiguration`. WMI returned `WBEM_E_NOT_FOUND` for a class the client.msi expects. Known failure on MP servers after certain cumulative updates.",
+    "evidence": [
+        { "component": "ccmsetup", "match": "0x80041002" },
+        { "component": "ccmsetup", "match": "CcmRegisterHostingConfiguration" }
+    ],
+    "fix": "If the client is being installed on the MP itself: uninstall the management point role, reinstall the client agent via `Ccmsetup.exe /source:'<CM-install>\\Client'`, then reinstall the MP role. For a regular client, check WMI health (`winmgmt /verifyrepository`) and ensure `root\\ccm` namespace exists; if not, repair with `/salvagerepository` before retrying ccmsetup.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/client-installation/client-agent-installation-error-80041002",
+        "https://learn.microsoft.com/mem/configmgr/core/clients/deploy/deploy-clients-to-windows-computers"
+    ]
+}

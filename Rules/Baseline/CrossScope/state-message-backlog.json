@@ -1,0 +1,24 @@
+{
+    "id": "state-message-backlog",
+    "scope": "CrossScope",
+    "confidence": 78,
+    "version": "1.0",
+    "authoredAt": "2026-04-24",
+    "authoredBy": "jason",
+    "source": "baseline",
+    "when": {
+        "all": [
+            { "component": "statesys", "pattern": "(?i)(backlog|queue|incoming)" }
+        ]
+    },
+    "verdict": "State message processor has a large backlog in `inboxes\\auth\\statesys.box\\incoming`. Compliance reporting and deployment status lag behind reality until the backlog drains.",
+    "evidence": [
+        { "component": "statesys", "match": "(?i)incoming" },
+        { "component": "statesys", "match": "(?i)backlog" }
+    ],
+    "fix": "Identify the flooding source. Typical causes: a massive deployment (1000+ updates to thousands of clients) generates per-update per-client state messages; a reporting loop from a misconfigured compliance policy; or a malformed configuration baseline retriggering. For acute relief, set `HKLM\\SOFTWARE\\Microsoft\\SMS\\Components\\SMS_StateSystem BatchSize` higher (default 500, try 2500) and `MaximumDeleteLoops` higher. For long-term fix, reduce deployment fan-out or split the baseline.",
+    "references": [
+        "https://learn.microsoft.com/troubleshoot/mem/configmgr/setup-migrate-backup-recovery/state-message-processing-performance",
+        "https://learn.microsoft.com/mem/configmgr/core/servers/manage/the-site-component-manager-component"
+    ]
+}

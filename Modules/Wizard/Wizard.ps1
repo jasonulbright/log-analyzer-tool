@@ -86,7 +86,7 @@ function New-LATWizardView {
                         finally { $rdr.Dispose() }
                     } finally { $stream.Dispose() }
                 }
-            } catch { } finally {
+            } catch { <# Reading the manifest from a damaged zip is best-effort, and the row is built without a manifest. #> $null = $_ } finally {
                 if ($archive) { $archive.Dispose() }
             }
             $out.Add((New-LATWizardIncidentRowVM -FileInfo $f -Manifest $manifest))

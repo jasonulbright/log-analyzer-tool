@@ -74,7 +74,7 @@ function New-LATSettingsView {
         param([string]$Path)
         if ([string]::IsNullOrEmpty($Path)) { return }
         if (-not (Test-Path $Path)) {
-            try { $null = New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop } catch { }
+            try { $null = New-Item -ItemType Directory -Path $Path -Force -ErrorAction Stop } catch { <# Creating the overlay folder is best-effort, and the next line tests whether the folder exists. #> $null = $_ }
         }
         if (Test-Path $Path) {
             Start-Process -FilePath 'explorer.exe' -ArgumentList $Path | Out-Null

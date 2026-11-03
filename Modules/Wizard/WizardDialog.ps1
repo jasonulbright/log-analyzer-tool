@@ -80,14 +80,14 @@ function Show-LATRuleWizardDialog {
         if ($theme) {
             [void][ControlzEx.Theming.ThemeManager]::Current.ChangeTheme($dlg, $theme)
         }
-    } catch { }
+    } catch { <# Applying the owner theme to the dialog is cosmetic, and the dialog keeps the default theme. #> $null = $_ }
     $dlg.Owner = $Owner
     try {
         $dlg.WindowTitleBrush          = $Owner.WindowTitleBrush
         $dlg.NonActiveWindowTitleBrush = $Owner.WindowTitleBrush
         $dlg.GlowBrush                 = $Owner.GlowBrush
         $dlg.NonActiveGlowBrush        = $Owner.GlowBrush
-    } catch { }
+    } catch { <# Copying the title bar and glow brushes from the owner is cosmetic, and the dialog keeps the default look. #> $null = $_ }
 
     # Resolve named controls.
     $txtRuleId      = $dlg.FindName('txtRuleId')

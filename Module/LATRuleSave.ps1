@@ -200,7 +200,7 @@ function Export-LATRulePatch {
         # Set-Clipboard is available in PS 5.1+. If it is not present
         # (e.g. a trimmed PS host), fall through quietly.
         if (Get-Command Set-Clipboard -ErrorAction SilentlyContinue) {
-            try { Set-Clipboard -Value $body -ErrorAction Stop } catch { }
+            try { Set-Clipboard -Value $body -ErrorAction Stop } catch { <# Copying the patch text to the clipboard is optional, and the patch file is already written. #> $null = $_ }
         }
     }
 

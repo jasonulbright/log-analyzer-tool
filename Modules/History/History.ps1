@@ -148,6 +148,7 @@ function New-LATHistoryView {
                 # Corrupt zip or unreadable manifest -- fall through with
                 # $manifest = $null; the VM falls back to the file's
                 # LastWriteTime for the timestamp column.
+                $null = $_
             } finally {
                 if ($archive) { $archive.Dispose() }
             }

@@ -887,7 +887,7 @@ function Resolve-ErrorCode {
         $hexCode = $code.ToUpper()
         try {
             $decCode = [string][int64]("$code")
-        } catch {}
+        } catch { <# Converting a hex code to decimal is optional, and the lookup continues with the hex value. #> $null = $_ }
     }
     elseif ($code -match '^-?\d+$') {
         $decCode = $code
@@ -897,7 +897,7 @@ function Resolve-ErrorCode {
             } else {
                 $hexCode = '0x' + ([int64]$code).ToString('X')
             }
-        } catch {}
+        } catch { <# Converting a decimal code to hex is optional, and the lookup continues with the decimal value. #> $null = $_ }
     }
 
     # Look up in database
@@ -926,7 +926,7 @@ function Resolve-ErrorCode {
     try {
         $intCode = [int]$code
         $win32Msg = ([System.ComponentModel.Win32Exception]::new($intCode)).Message
-    } catch {}
+    } catch { <# The Win32 message lookup is an optional fallback, and the message stays null when the code is not valid. #> $null = $_ }
 
     return [pscustomobject]@{
         Code        = $code
@@ -1575,7 +1575,7 @@ function Get-ClientMsiExitCode {
                 $dateStr  = $tsMatch.Groups['Date'].Value
                 $timeStr  = ($tsMatch.Groups['Time'].Value) -replace '[+-]\d+$', ''
                 $timestamp = [datetime]::Parse("$dateStr $timeStr")
-            } catch {}
+            } catch { <# Parsing the CMTrace timestamp is optional, and the code falls back to the file write time. #> $null = $_ }
         }
 
         # If no CMTrace timestamp, use file last write time
